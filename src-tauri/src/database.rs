@@ -785,6 +785,7 @@ impl Database {
             
             CREATE TABLE IF NOT EXISTS menu_categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT UNIQUE,
                 name TEXT NOT NULL UNIQUE,
                 sort_no INTEGER DEFAULT 0,
                 is_active INTEGER NOT NULL DEFAULT 1
@@ -1118,8 +1119,8 @@ impl Database {
             [],
         )?;
         conn.execute(
-            "INSERT OR IGNORE INTO menu_categories (name, sort_no) VALUES
-                ('海鲜类', 1), ('肉类', 2), ('素食类', 3), ('主食与其他', 4)",
+            "INSERT OR IGNORE INTO menu_categories (code, name, sort_no) VALUES
+                ('seafood_dishes', '海鲜类', 1), ('meat_dishes', '肉类', 2), ('vegetable_dishes', '素食类', 3), ('staple_other', '主食与其他', 4)",
             [],
         )?;
         let mat_count: i64 = conn.query_row("SELECT COUNT(*) FROM materials", [], |row| row.get(0))?;
@@ -1502,7 +1503,8 @@ impl Database {
 
     pub fn create_menu_category(&self, name: &str, sort_no: i32) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("INSERT INTO menu_categories (name, sort_no) VALUES (?1, ?2)", params![name, sort_no])?;
+        let code = name.to_uppercase().replace(' ', "_");
+        conn.execute("INSERT INTO menu_categories (code, name, sort_no) VALUES (?1, ?2, ?3)", params![code, name, sort_no])?;
         Ok(conn.last_insert_rowid())
     }
 
@@ -1763,10 +1765,12 @@ impl Database {
 
     pub fn update_menu_category(&self, id: i64, name: Option<&str>, sort_no: Option<i32>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "UPDATE menu_categories SET name = COALESCE(?1, name), sort_no = COALESCE(?2, sort_no) WHERE id = ?3",
-            params![name, sort_no, id],
-        )?;
+        if let Some(n) = name {
+            let code = n.to_uppercase().replace(' ', "_");
+            conn.execute("UPDATE menu_categories SET code = ?1, name = ?2, sort_no = COALESCE(?3, sort_no) WHERE id = ?4", params![code, n, sort_no, id])?;
+        } else if let Some(s) = sort_no {
+            conn.execute("UPDATE menu_categories SET sort_no = ?1 WHERE id = ?2", params![s, id])?;
+        }
         Ok(())
     }
 
