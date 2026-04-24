@@ -1,0 +1,59 @@
+# ==================== Cuckoo .gitignore ====================
+
+# --- Node.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Frontend Build ---
+dist/
+.vite/
+
+# --- Rust ---
+src-tauri/target/
+src-tauri/gen/
+src-tauri/*.db
+src-tauri/*.sqlite
+src-tauri/*.sqlite3
+
+# --- Debug Output ---
+*.bin
+debug_*
+mock_print.*
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Test Coverage ---
+coverage/
+*.lcov
+
+# --- Tauri Logs ---
+*.log
+
+# --- Environment ---
+.env
+.env.local
+.env.*.local
+
+# --- Logo Options (design files, not production) ---
+src-tauri/icons/logo-option-*.svg
+
+# --- Assets (screenshots are optional) ---
+# assets/screenshots/
+
+# --- Temporary ---
+*.tmp
+*.temp
+.cache/

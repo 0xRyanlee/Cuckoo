@@ -1,0 +1,1368 @@
+use tauri::State;
+use crate::database::{Database, MaterialWithTags, Unit, MaterialCategory, Tag, MaterialState, Supplier, Recipe, RecipeWithItems, RecipeCostResult, MenuItem, MenuCategory, Order, OrderItem, OrderItemModifier, KitchenStation, KitchenTicket, InventoryBatch, InventorySummary, AttributeTemplate, EntityAttribute, InventoryTxn, MenuItemSpec, PrinterConfig, PrintTask, PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Notification, Customer, Coupon};
+use crate::printer::{self, EscPosBuilder, LanPrinter};
+use serde::{Deserialize, Serialize};
+
+pub struct AppState {
+    pub db: Database,
+}
+
+// ==================== 請求體 ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateMaterialRequest {
+    pub code: String,
+    pub name: String,
+    pub category_id: Option<i64>,
+    pub base_unit_id: i64,
+    pub shelf_life_days: Option<i32>,
+    pub tag_ids: Option<Vec<i64>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateCategoryRequest {
+    pub code: String,
+    pub name: String,
+    pub sort_no: Option<i32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateTagRequest {
+    pub code: String,
+    pub name: String,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateMaterialStateRequest {
+    pub material_id: i64,
+    pub state_code: String,
+    pub state_name: String,
+    pub unit_id: Option<i64>,
+    pub yield_rate: Option<f64>,
+    pub cost_multiplier: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateSupplierRequest {
+    pub name: String,
+    pub phone: Option<String>,
+    pub contact_person: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetAttributeRequest {
+    pub entity_type: String,
+    pub entity_id: i64,
+    pub attr_code: String,
+    pub value: Option<f64>,
+    pub value_text: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateRecipeRequest {
+    pub code: String,
+    pub name: String,
+    pub recipe_type: String,
+    pub output_qty: f64,
+    pub output_material_id: Option<i64>,
+    pub output_state_id: Option<i64>,
+    pub output_unit_id: Option<i64>,
+    pub items: Option<Vec<RecipeItemRequest>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RecipeItemRequest {
+    pub item_type: String,
+    pub ref_id: i64,
+    pub qty: f64,
+    pub unit_id: i64,
+    pub wastage_rate: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateMenuItemRequest {
+    pub name: String,
+    pub category_id: Option<i64>,
+    pub recipe_id: Option<i64>,
+    pub sales_price: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateMenuItemSpecRequest {
+    pub menu_item_id: i64,
+    pub spec_code: String,
+    pub spec_name: String,
+    pub price_delta: f64,
+    pub qty_multiplier: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateOrderRequest {
+    pub source: String,
+    pub dine_type: String,
+    pub table_no: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateInventoryTxnRequest {
+    pub txn_type: String,
+    pub ref_type: Option<String>,
+    pub ref_id: Option<i64>,
+    pub lot_id: Option<i64>,
+    pub material_id: i64,
+    pub state_id: Option<i64>,
+    pub qty_delta: f64,
+    pub cost_delta: Option<f64>,
+    pub operator: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddOrderItemRequest {
+    pub order_id: i64,
+    pub menu_item_id: i64,
+    pub qty: f64,
+    pub unit_price: f64,
+    pub spec_code: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OrderWithItems {
+    #[serde(flatten)]
+    pub order: Order,
+    pub items: Vec<OrderItem>,
+}
+
+// ==================== 單位 API ====================
+
+#[tauri::command]
+pub fn get_units(state: State<AppState>) -> Result<Vec<Unit>, String> {
+    state.db.get_units().map_err(|e| e.to_string())
+}
+
+// ==================== 材料分類 API ====================
+
+#[tauri::command]
+pub fn get_material_categories(state: State<AppState>) -> Result<Vec<MaterialCategory>, String> {
+    state.db.get_material_categories().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_material_category(state: State<AppState>, req: CreateCategoryRequest) -> Result<i64, String> {
+    let sort_no = req.sort_no.unwrap_or(0);
+    state.db.create_material_category(&req.code, &req.name, sort_no).map_err(|e| e.to_string())
+}
+
+// ==================== 標籤 API ====================
+
+#[tauri::command]
+pub fn get_tags(state: State<AppState>) -> Result<Vec<Tag>, String> {
+    state.db.get_tags().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_tag(state: State<AppState>, req: CreateTagRequest) -> Result<i64, String> {
+    state.db.create_tag(&req.code, &req.name, req.color.as_deref()).map_err(|e| e.to_string())
+}
+
+// ==================== 材料 API ====================
+
+#[tauri::command]
+pub fn get_materials(state: State<AppState>, category_id: Option<i64>) -> Result<Vec<MaterialWithTags>, String> {
+    state.db.get_materials(category_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_material(state: State<AppState>, req: CreateMaterialRequest) -> Result<i64, String> {
+    let id = state.db.create_material(
+        &req.code,
+        &req.name,
+        req.category_id,
+        req.base_unit_id,
+        req.shelf_life_days,
+    ).map_err(|e| e.to_string())?;
+    
+    if let Some(tag_ids) = req.tag_ids {
+        state.db.add_material_tags(id, &tag_ids).map_err(|e| e.to_string())?;
+    }
+    
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn add_material_tags(state: State<AppState>, material_id: i64, tag_ids: Vec<i64>) -> Result<(), String> {
+    state.db.add_material_tags(material_id, &tag_ids).map_err(|e| e.to_string())
+}
+
+// ==================== 材料狀態 API ====================
+
+#[tauri::command]
+pub fn get_material_states(state: State<AppState>, material_id: i64) -> Result<Vec<MaterialState>, String> {
+    state.db.get_material_states(material_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_material_state(state: State<AppState>, req: CreateMaterialStateRequest) -> Result<i64, String> {
+    let yield_rate = req.yield_rate.unwrap_or(1.0);
+    let cost_multiplier = req.cost_multiplier.unwrap_or(1.0);
+    state.db.create_material_state(
+        req.material_id,
+        &req.state_code,
+        &req.state_name,
+        req.unit_id,
+        yield_rate,
+        cost_multiplier,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_all_material_states(state: State<AppState>) -> Result<Vec<MaterialState>, String> {
+    state.db.get_all_material_states().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_material_state(state: State<AppState>, id: i64, state_code: Option<String>, state_name: Option<String>, unit_id: Option<i64>, yield_rate: Option<f64>, cost_multiplier: Option<f64>) -> Result<(), String> {
+    state.db.update_material_state(id, state_code.as_deref(), state_name.as_deref(), unit_id, yield_rate, cost_multiplier).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_material_state(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_material_state(id).map_err(|e| e.to_string())
+}
+
+// ==================== 供應商 API ====================
+
+#[tauri::command]
+pub fn get_suppliers(state: State<AppState>) -> Result<Vec<Supplier>, String> {
+    state.db.get_suppliers().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_supplier(state: State<AppState>, req: CreateSupplierRequest) -> Result<i64, String> {
+    state.db.create_supplier(&req.name, req.phone.as_deref(), req.contact_person.as_deref()).map_err(|e| e.to_string())
+}
+
+// ==================== 屬性模板 API ====================
+
+#[tauri::command]
+pub fn get_attribute_templates(state: State<AppState>, entity_type: Option<String>, category: Option<String>) -> Result<Vec<AttributeTemplate>, String> {
+    state.db.get_attribute_templates(entity_type.as_deref(), category.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_entity_attribute(state: State<AppState>, req: SetAttributeRequest) -> Result<(), String> {
+    state.db.set_entity_attribute(
+        &req.entity_type,
+        req.entity_id,
+        &req.attr_code,
+        req.value,
+        req.value_text.as_deref(),
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_entity_attributes(state: State<AppState>, entity_type: String, entity_id: i64) -> Result<Vec<EntityAttribute>, String> {
+    state.db.get_entity_attributes(&entity_type, entity_id).map_err(|e| e.to_string())
+}
+
+// ==================== 配方 API ====================
+
+#[tauri::command]
+pub fn get_recipes(state: State<AppState>, recipe_type: Option<String>) -> Result<Vec<Recipe>, String> {
+    state.db.get_recipes(recipe_type.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_recipe_with_items(state: State<AppState>, recipe_id: i64) -> Result<RecipeWithItems, String> {
+    state.db.get_recipe_with_items(recipe_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_recipe(state: State<AppState>, req: CreateRecipeRequest) -> Result<i64, String> {
+    let id = state.db.create_recipe(
+        &req.code,
+        &req.name,
+        &req.recipe_type,
+        req.output_qty,
+        req.output_material_id,
+        req.output_state_id,
+        req.output_unit_id,
+    ).map_err(|e| e.to_string())?;
+    
+    if let Some(items) = req.items {
+        for item in items {
+            let wastage_rate = item.wastage_rate.unwrap_or(0.0);
+            state.db.add_recipe_item(id, &item.item_type, item.ref_id, item.qty, item.unit_id, wastage_rate, 0)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn add_recipe_item(state: State<AppState>, recipe_id: i64, req: RecipeItemRequest) -> Result<i64, String> {
+    let wastage_rate = req.wastage_rate.unwrap_or(0.0);
+    state.db.add_recipe_item(recipe_id, &req.item_type, req.ref_id, req.qty, req.unit_id, wastage_rate, 0)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn calculate_recipe_cost(state: State<AppState>, recipe_id: i64) -> Result<f64, String> {
+    state.db.calculate_recipe_cost(recipe_id).map_err(|e| e.to_string())
+}
+
+// ==================== 菜單 API ====================
+
+#[tauri::command]
+pub fn get_menu_categories(state: State<AppState>) -> Result<Vec<MenuCategory>, String> {
+    state.db.get_menu_categories().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_menu_category(state: State<AppState>, name: String, sort_no: Option<i32>) -> Result<i64, String> {
+    state.db.create_menu_category(&name, sort_no.unwrap_or(0)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_menu_items(state: State<AppState>, category_id: Option<i64>) -> Result<Vec<MenuItem>, String> {
+    state.db.get_menu_items(category_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_menu_item(state: State<AppState>, req: CreateMenuItemRequest) -> Result<i64, String> {
+    state.db.create_menu_item(&req.name, req.category_id, req.recipe_id, req.sales_price).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_menu_item_specs(state: State<AppState>, menu_item_id: i64) -> Result<Vec<MenuItemSpec>, String> {
+    state.db.get_menu_item_specs(menu_item_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_menu_item_spec(state: State<AppState>, req: CreateMenuItemSpecRequest) -> Result<i64, String> {
+    state.db.create_menu_item_spec(req.menu_item_id, &req.spec_code, &req.spec_name, req.price_delta, req.qty_multiplier, 0).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_menu_item_spec(state: State<AppState>, id: i64, spec_code: Option<String>, spec_name: Option<String>, price_delta: Option<f64>, qty_multiplier: Option<f64>, sort_no: Option<i32>) -> Result<(), String> {
+    state.db.update_menu_item_spec(id, spec_code.as_deref(), spec_name.as_deref(), price_delta, qty_multiplier, sort_no).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_menu_item_spec(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_menu_item_spec(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_menu_items_for_pos(state: State<AppState>, category_id: Option<i64>) -> Result<Vec<MenuItem>, String> {
+    state.db.get_menu_items_for_pos(category_id).map_err(|e| e.to_string())
+}
+
+// ==================== 訂單 API ====================
+
+#[tauri::command]
+pub fn create_order(state: State<AppState>, req: CreateOrderRequest) -> Result<String, String> {
+    state.db.create_order(&req.source, &req.dine_type, req.table_no.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_orders(state: State<AppState>) -> Result<Vec<Order>, String> {
+    state.db.get_orders().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_order_with_items(state: State<AppState>, order_id: i64) -> Result<OrderWithItems, String> {
+    state.db.get_order_with_items(order_id).map(|(order, items)| OrderWithItems { order, items }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_order_item(state: State<AppState>, req: AddOrderItemRequest) -> Result<i64, String> {
+    state.db.add_order_item(
+        req.order_id,
+        req.menu_item_id,
+        req.qty,
+        req.unit_price,
+        req.spec_code.as_deref(),
+        req.note.as_deref(),
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn submit_order(state: State<AppState>, order_id: i64) -> Result<Vec<String>, String> {
+    state.db.submit_order_full(order_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cancel_order(state: State<AppState>, order_id: i64) -> Result<Vec<String>, String> {
+    state.db.release_inventory_for_order(order_id).map_err(|e| e.to_string())
+}
+
+// ==================== KDS API ====================
+
+#[tauri::command]
+pub fn get_kitchen_stations(state: State<AppState>) -> Result<Vec<KitchenStation>, String> {
+    state.db.get_kitchen_stations().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_station_tickets(state: State<AppState>, station_id: i64, status: Option<String>) -> Result<Vec<KitchenTicket>, String> {
+    state.db.get_station_tickets(station_id, status.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_all_tickets(state: State<AppState>, status: Option<String>) -> Result<Vec<KitchenTicket>, String> {
+    state.db.get_all_tickets(status.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TicketWithItems {
+    #[serde(flatten)]
+    pub ticket: KitchenTicket,
+    pub order_no: String,
+    pub dine_type: String,
+    pub table_no: Option<String>,
+    pub items: Vec<OrderItem>,
+}
+
+#[tauri::command]
+pub fn get_all_tickets_with_items(state: State<AppState>, status: Option<String>) -> Result<Vec<TicketWithItems>, String> {
+    let tickets = state.db.get_all_tickets(status.as_deref()).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for ticket in tickets {
+        if let Ok((order, items)) = state.db.get_order_with_items(ticket.order_id) {
+            result.push(TicketWithItems {
+                ticket,
+                order_no: order.order_no,
+                dine_type: order.dine_type,
+                table_no: order.table_no,
+                items,
+            });
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn start_ticket(state: State<AppState>, ticket_id: i64, operator: Option<String>) -> Result<(), String> {
+    state.db.start_ticket(ticket_id, operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn finish_ticket(state: State<AppState>, ticket_id: i64, operator: Option<String>) -> Result<(), String> {
+    state.db.finish_ticket(ticket_id, operator.as_deref()).map_err(|e| e.to_string())
+}
+
+// ==================== 庫存 API ====================
+
+#[tauri::command]
+pub fn get_inventory_batches(state: State<AppState>, material_id: Option<i64>) -> Result<Vec<InventoryBatch>, String> {
+    state.db.get_inventory_batches(material_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_inventory_summary(state: State<AppState>) -> Result<Vec<InventorySummary>, String> {
+    state.db.get_inventory_summary().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_inventory_txn(state: State<AppState>, req: CreateInventoryTxnRequest) -> Result<i64, String> {
+    let cost_delta = req.cost_delta.unwrap_or(0.0);
+    state.db.create_inventory_txn(
+        &req.txn_type,
+        req.ref_type.as_deref(),
+        req.ref_id,
+        req.lot_id,
+        req.material_id,
+        req.state_id,
+        req.qty_delta,
+        Some(cost_delta),
+        req.operator.as_deref(),
+        req.note.as_deref(),
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_inventory_txns(state: State<AppState>, material_id: Option<i64>, limit: Option<i64>) -> Result<Vec<InventoryTxn>, String> {
+    state.db.get_inventory_txns(material_id, limit.unwrap_or(100)).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateBatchRequest {
+    pub material_id: i64,
+    pub state_id: Option<i64>,
+    pub lot_no: String,
+    pub supplier_id: Option<i64>,
+    pub brand: Option<String>,
+    pub spec: Option<String>,
+    pub quantity: f64,
+    pub cost_per_unit: f64,
+    pub production_date: Option<String>,
+    pub expiry_date: Option<String>,
+    pub ice_coating_rate: Option<f64>,
+    pub quality_rate: Option<f64>,
+    pub seasonal_factor: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdjustInventoryRequest {
+    pub material_id: i64,
+    pub lot_id: i64,
+    pub qty_delta: f64,
+    pub reason: String,
+    pub operator: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RecordWastageRequest {
+    pub material_id: i64,
+    pub lot_id: i64,
+    pub qty: f64,
+    pub wastage_type: String,
+    pub operator: Option<String>,
+    pub note: Option<String>,
+}
+
+#[tauri::command]
+pub fn create_inventory_batch(state: State<AppState>, req: CreateBatchRequest) -> Result<i64, String> {
+    let seasonal = req.seasonal_factor.unwrap_or(1.0);
+    state.db.create_inventory_batch(
+        req.material_id, req.state_id, &req.lot_no, req.supplier_id,
+        req.brand.as_deref(), req.spec.as_deref(), req.quantity, req.cost_per_unit,
+        req.production_date.as_deref(), req.expiry_date.as_deref(),
+        req.ice_coating_rate, req.quality_rate, seasonal,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_inventory_batch(state: State<AppState>, batch_id: i64) -> Result<(), String> {
+    state.db.delete_inventory_batch(batch_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn adjust_inventory(state: State<AppState>, req: AdjustInventoryRequest) -> Result<(), String> {
+    state.db.adjust_inventory(req.lot_id, req.qty_delta, req.operator.as_deref(), req.note.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn record_wastage(state: State<AppState>, req: RecordWastageRequest) -> Result<(), String> {
+    state.db.record_wastage(req.lot_id, req.qty, Some(&req.wastage_type), req.operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_material(state: State<AppState>, id: i64, name: Option<String>, category_id: Option<i64>, shelf_life_days: Option<i32>) -> Result<(), String> {
+    state.db.update_material(id, name.as_deref(), category_id, shelf_life_days).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_material(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_material(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_material_category(state: State<AppState>, id: i64, name: String, sort_no: i32) -> Result<(), String> {
+    state.db.update_material_category(id, &name, sort_no).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_material_category(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_material_category(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_tag(state: State<AppState>, id: i64, name: String, color: Option<String>) -> Result<(), String> {
+    state.db.update_tag(id, &name, color.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_tag(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_tag(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_material_tag(state: State<AppState>, material_id: i64, tag_id: i64) -> Result<(), String> {
+    state.db.remove_material_tag(material_id, tag_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_supplier(state: State<AppState>, id: i64, name: Option<String>, phone: Option<String>, contact_person: Option<String>, address: Option<String>, note: Option<String>) -> Result<(), String> {
+    state.db.update_supplier(id, name.as_deref(), phone.as_deref(), contact_person.as_deref(), address.as_deref(), note.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_supplier(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_supplier(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_menu_item(state: State<AppState>, id: i64, name: Option<String>, category_id: Option<i64>, recipe_id: Option<i64>, sales_price: Option<f64>) -> Result<(), String> {
+    state.db.update_menu_item(id, name.as_deref(), category_id, recipe_id, sales_price).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_menu_item_availability(state: State<AppState>, id: i64) -> Result<bool, String> {
+    state.db.toggle_menu_item_availability(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_menu_item(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_menu_item(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_menu_category(state: State<AppState>, id: i64, name: String, sort_no: i32) -> Result<(), String> {
+    state.db.update_menu_category(id, Some(&name), Some(sort_no)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_menu_category(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_menu_category(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_recipe(state: State<AppState>, id: i64, name: Option<String>, output_qty: Option<f64>) -> Result<(), String> {
+    state.db.update_recipe(id, name.as_deref(), None, output_qty, None).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_recipe(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_recipe(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_recipe_item(state: State<AppState>, item_id: i64) -> Result<(), String> {
+    state.db.delete_recipe_item(item_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_station_menu_item(state: State<AppState>, station_id: i64, menu_item_id: i64) -> Result<i64, String> {
+    state.db.add_station_menu_item(station_id, menu_item_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_station_menu_item(state: State<AppState>, station_id: i64, menu_item_id: i64) -> Result<(), String> {
+    state.db.remove_station_menu_item(station_id, menu_item_id).map_err(|e| e.to_string())
+}
+
+// ==================== 健康檢查 ====================
+
+#[tauri::command]
+pub fn health_check() -> String {
+    "ok".to_string()
+}
+
+// ==================== 打印機 API ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreatePrinterRequest {
+    pub name: String,
+    pub printer_type: String,
+    pub connection_type: String,
+    pub feie_user: Option<String>,
+    pub feie_ukey: Option<String>,
+    pub feie_sn: Option<String>,
+    pub feie_key: Option<String>,
+    pub lan_ip: Option<String>,
+    pub lan_port: Option<i32>,
+    pub paper_width: Option<String>,
+    pub is_default: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SendPrintTaskRequest {
+    pub printer_id: i64,
+    pub task_type: String,
+    pub ref_type: Option<String>,
+    pub ref_id: Option<i64>,
+    pub content: String,
+}
+
+#[tauri::command]
+pub fn get_printers(state: State<AppState>) -> Result<Vec<PrinterConfig>, String> {
+    state.db.get_printers().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_default_printer(state: State<AppState>) -> Result<Option<PrinterConfig>, String> {
+    state.db.get_default_printer().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_printer(state: State<AppState>, req: CreatePrinterRequest) -> Result<i64, String> {
+    state.db.create_printer(
+        &req.name,
+        &req.printer_type,
+        &req.connection_type,
+        req.feie_user.as_deref(),
+        req.feie_ukey.as_deref(),
+        req.feie_sn.as_deref(),
+        req.feie_key.as_deref(),
+        req.lan_ip.as_deref(),
+        req.lan_port.unwrap_or(9100),
+        req.paper_width.as_deref().unwrap_or("80mm"),
+        req.is_default.unwrap_or(false),
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_printer(state: State<AppState>, id: i64, name: Option<String>, printer_type: Option<String>, connection_type: Option<String>, feie_user: Option<String>, feie_ukey: Option<String>, feie_sn: Option<String>, feie_key: Option<String>, lan_ip: Option<String>, lan_port: Option<i32>, paper_width: Option<String>, is_default: Option<bool>) -> Result<(), String> {
+    state.db.update_printer(
+        id,
+        name.as_deref(),
+        printer_type.as_deref(),
+        connection_type.as_deref(),
+        feie_user.as_deref(),
+        feie_ukey.as_deref(),
+        feie_sn.as_deref(),
+        feie_key.as_deref(),
+        lan_ip.as_deref(),
+        lan_port,
+        paper_width.as_deref(),
+        is_default,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_printer(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_printer(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn scan_lan_printers(_state: State<AppState>, subnet: String, timeout_ms: Option<u64>) -> Result<Vec<LanPrinter>, String> {
+    let timeout = timeout_ms.unwrap_or(500);
+    Ok(printer::scan_lan_printers(&subnet, timeout))
+}
+
+#[tauri::command]
+pub fn test_feie_printer(_state: State<AppState>, user: String, ukey: String, sn: String) -> Result<String, String> {
+    let mut builder = EscPosBuilder::new();
+    builder.align_center().bold_on().double_height()
+        .text_ln("Cuckoo 打印測試")
+        .normal_size().bold_off()
+        .text_ln(&format!("打印機: {}", sn))
+        .text_ln(&format!("時間: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")))
+        .feed_lines(3).cut_paper();
+
+    let content = String::from_utf8_lossy(&builder.build()).to_string();
+    printer::feie_print(&user, &ukey, &sn, &content)
+}
+
+#[tauri::command]
+pub fn test_lan_printer(_state: State<AppState>, ip: String, port: Option<i32>) -> Result<String, String> {
+    let port = port.unwrap_or(9100);
+    let mut builder = EscPosBuilder::new();
+    builder.align_center().bold_on().double_height()
+        .text_ln("Cuckoo 打印測試")
+        .normal_size().bold_off()
+        .text_ln(&format!("打印機: {}:{}", ip, port))
+        .text_ln(&format!("時間: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")))
+        .feed_lines(3).cut_paper();
+
+    printer::lan_print_escpos(&ip, port, builder)
+        .map(|_| "測試頁發送成功".to_string())
+}
+
+#[tauri::command]
+pub fn send_print_task(state: State<AppState>, req: SendPrintTaskRequest) -> Result<i64, String> {
+    let printer = state.db.get_printers().map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == req.printer_id)
+        .ok_or(format!("打印機 #{} 不存在", req.printer_id))?;
+
+    let task_id = state.db.create_print_task(
+        &req.task_type,
+        req.ref_type.as_deref(),
+        req.ref_id,
+        &req.content,
+        Some(req.printer_id),
+        Some(&printer.name),
+    ).map_err(|e| e.to_string())?;
+
+    let result = match printer.connection_type.as_str() {
+        "feie" => {
+            let user = printer.feie_user.as_deref().ok_or("飛鵝用戶未配置")?;
+            let ukey = printer.feie_ukey.as_deref().ok_or("飛鵝 UKEY 未配置")?;
+            let sn = printer.feie_sn.as_deref().ok_or("飛鵝 SN 未配置")?;
+            printer::feie_print(user, ukey, sn, &req.content)
+        }
+        "lan" => {
+            let ip = printer.lan_ip.as_deref().ok_or("局域網 IP 未配置")?;
+            let port = printer.lan_port;
+            let data = req.content.as_bytes();
+            printer::lan_print(ip, port, data)
+                .map(|_| "ok".to_string())
+        }
+        _ => Err(format!("不支持的連接類型: {}", printer.connection_type)),
+    };
+
+    match result {
+        Ok(_) => {
+            state.db.update_print_task_status(task_id, "printed", None).map_err(|e| e.to_string())?;
+            Ok(task_id)
+        }
+        Err(e) => {
+            state.db.update_print_task_status(task_id, "failed", Some(&e)).map_err(|e| e.to_string())?;
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn print_kitchen_ticket(state: State<AppState>, order_no: String, dine_type: String, items: Vec<(String, f64, Option<String>)>, note: Option<String>, printer_id: Option<i64>) -> Result<i64, String> {
+    let printer = match printer_id {
+        Some(id) => state.db.get_printers().map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|p| p.id == id)
+            .ok_or(format!("打印機 #{} 不存在", id))?,
+        None => state.db.get_default_printer().map_err(|e| e.to_string())?
+            .ok_or("未配置默認打印機")?,
+    };
+
+    let builder = printer::build_kitchen_ticket_content(&order_no, &dine_type, &items, note.as_deref());
+    let content_bytes = builder.build();
+    let content = String::from_utf8_lossy(&content_bytes).to_string();
+
+    let task_id = state.db.create_print_task(
+        "kitchen_ticket",
+        Some("order"),
+        None,
+        &content,
+        Some(printer.id),
+        Some(&printer.name),
+    ).map_err(|e| e.to_string())?;
+
+    let result = match printer.connection_type.as_str() {
+        "feie" => {
+            let user = printer.feie_user.as_deref().ok_or("飛鵝用戶未配置")?;
+            let ukey = printer.feie_ukey.as_deref().ok_or("飛鵝 UKEY 未配置")?;
+            let sn = printer.feie_sn.as_deref().ok_or("飛鵝 SN 未配置")?;
+            printer::feie_print(user, ukey, sn, &content)
+        }
+        "lan" => {
+            let ip = printer.lan_ip.as_deref().ok_or("局域網 IP 未配置")?;
+            let port = printer.lan_port;
+            printer::lan_print(ip, port, &content_bytes)
+                .map(|_| "ok".to_string())
+        }
+        _ => Err(format!("不支持的連接類型: {}", printer.connection_type)),
+    };
+
+    match result {
+        Ok(_) => {
+            state.db.update_print_task_status(task_id, "printed", None).map_err(|e| e.to_string())?;
+            Ok(task_id)
+        }
+        Err(e) => {
+            state.db.update_print_task_status(task_id, "failed", Some(&e)).map_err(|e| e.to_string())?;
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn print_batch_label(state: State<AppState>, lot_no: String, material_name: String, quantity: f64, unit: String, expiry_date: Option<String>, supplier_name: Option<String>, printer_id: Option<i64>) -> Result<i64, String> {
+    let printer = match printer_id {
+        Some(id) => state.db.get_printers().map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|p| p.id == id)
+            .ok_or(format!("打印機 #{} 不存在", id))?,
+        None => state.db.get_default_printer().map_err(|e| e.to_string())?
+            .ok_or("未配置默認打印機")?,
+    };
+
+    let builder = printer::build_batch_label_content(
+        &lot_no,
+        &material_name,
+        quantity,
+        &unit,
+        expiry_date.as_deref(),
+        supplier_name.as_deref(),
+    );
+    let content = builder.build();
+
+    let task_id = state.db.create_print_task(
+        "batch_label",
+        Some("batch"),
+        None,
+        &content,
+        Some(printer.id),
+        Some(&printer.name),
+    ).map_err(|e| e.to_string())?;
+
+    let result = match printer.connection_type.as_str() {
+        "feie" => {
+            let user = printer.feie_user.as_deref().ok_or("飛鵝用戶未配置")?;
+            let ukey = printer.feie_ukey.as_deref().ok_or("飛鵝 UKEY 未配置")?;
+            let sn = printer.feie_sn.as_deref().ok_or("飛鵝 SN 未配置")?;
+            printer::feie_print(user, ukey, sn, &content)
+        }
+        "lan" => {
+            let ip = printer.lan_ip.as_deref().ok_or("局域網 IP 未配置")?;
+            let port = printer.lan_port;
+            printer::lan_print_tspl(ip, port, &builder)
+                .map(|_| "ok".to_string())
+        }
+        _ => Err(format!("不支持的連接類型: {}", printer.connection_type)),
+    };
+
+    match result {
+        Ok(_) => {
+            state.db.update_print_task_status(task_id, "printed", None).map_err(|e| e.to_string())?;
+            Ok(task_id)
+        }
+        Err(e) => {
+            state.db.update_print_task_status(task_id, "failed", Some(&e)).map_err(|e| e.to_string())?;
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_print_tasks(state: State<AppState>, limit: Option<i64>) -> Result<Vec<PrintTask>, String> {
+    state.db.get_print_tasks(limit.unwrap_or(50)).map_err(|e| e.to_string())
+}
+
+// ==================== 採購單命令 ====================
+
+#[tauri::command]
+pub fn get_purchase_orders(state: State<AppState>, status: Option<String>) -> Result<Vec<PurchaseOrder>, String> {
+    state.db.get_purchase_orders(status.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_purchase_order_with_items(state: State<AppState>, po_id: i64) -> Result<PurchaseOrderWithItems, String> {
+    state.db.get_purchase_order_with_items(po_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_purchase_order(state: State<AppState>, supplier_id: Option<i64>, expected_date: Option<String>) -> Result<String, String> {
+    state.db.create_purchase_order(supplier_id, expected_date.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreatePurchaseOrderItemRequest {
+    pub po_id: i64,
+    pub material_id: i64,
+    pub qty: f64,
+    pub unit_id: Option<i64>,
+    pub cost_per_unit: f64,
+}
+
+#[tauri::command]
+pub fn add_purchase_order_item(state: State<AppState>, req: CreatePurchaseOrderItemRequest) -> Result<(), String> {
+    state.db.add_purchase_order_item(req.po_id, req.material_id, req.qty, req.unit_id, req.cost_per_unit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_purchase_order_status(state: State<AppState>, po_id: i64, status: String) -> Result<(), String> {
+    state.db.update_purchase_order_status(po_id, &status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_purchase_order(state: State<AppState>, po_id: i64) -> Result<(), String> {
+    state.db.delete_purchase_order(po_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn receive_purchase_order(state: State<AppState>, po_id: i64, operator: Option<String>, auto_print: Option<bool>) -> Result<Vec<i64>, String> {
+    let batches = state.db.receive_purchase_order(po_id, operator.as_deref()).map_err(|e| e.to_string())?;
+    if auto_print.unwrap_or(false) {
+        let mut print_ids = Vec::new();
+        for (_batch_id, lot_no, material_name, unit, qty, supplier_name) in batches {
+            let print_id = print_batch_label(
+                state.clone(),
+                lot_no,
+                material_name,
+                qty,
+                unit,
+                None,
+                supplier_name,
+                None,
+            ).map_err(|e| e.to_string())?;
+            print_ids.push(print_id);
+        }
+        Ok(print_ids)
+    } else {
+        Ok(batches.iter().map(|(id, _, _, _, _, _)| *id).collect())
+    }
+}
+
+// ==================== 生產單命令 ====================
+
+#[tauri::command]
+pub fn get_production_orders(state: State<AppState>, status: Option<String>) -> Result<Vec<ProductionOrder>, String> {
+    state.db.get_production_orders(status.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_production_order_with_items(state: State<AppState>, production_id: i64) -> Result<ProductionOrderWithItems, String> {
+    state.db.get_production_order_with_items(production_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_production_order(state: State<AppState>, recipe_id: i64, planned_qty: f64, operator: Option<String>) -> Result<String, String> {
+    state.db.create_production_order(recipe_id, planned_qty, operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn start_production_order(state: State<AppState>, production_id: i64, operator: Option<String>) -> Result<(), String> {
+    state.db.start_production_order(production_id, operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn complete_production_order(state: State<AppState>, production_id: i64, actual_qty: f64, operator: Option<String>) -> Result<(), String> {
+    state.db.complete_production_order(production_id, actual_qty, operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_production_order(state: State<AppState>, production_id: i64) -> Result<(), String> {
+    state.db.delete_production_order(production_id).map_err(|e| e.to_string())
+}
+
+// ==================== 盤點命令 ====================
+
+#[tauri::command]
+pub fn get_stocktakes(state: State<AppState>, status: Option<String>) -> Result<Vec<Stocktake>, String> {
+    state.db.get_stocktakes(status.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_stocktake_with_items(state: State<AppState>, stocktake_id: i64) -> Result<StocktakeWithItems, String> {
+    state.db.get_stocktake_with_items(stocktake_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_stocktake(state: State<AppState>, operator: Option<String>, note: Option<String>) -> Result<String, String> {
+    state.db.create_stocktake(operator.as_deref(), note.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_stocktake_item(state: State<AppState>, item_id: i64, actual_qty: f64) -> Result<(), String> {
+    state.db.update_stocktake_item(item_id, actual_qty).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn complete_stocktake(state: State<AppState>, stocktake_id: i64, operator: Option<String>) -> Result<(), String> {
+    state.db.complete_stocktake(stocktake_id, operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_stocktake(state: State<AppState>, stocktake_id: i64) -> Result<(), String> {
+    state.db.delete_stocktake(stocktake_id).map_err(|e| e.to_string())
+}
+
+// ==================== 加料/去料命令 ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddModifierRequest {
+    pub order_item_id: i64,
+    pub modifier_type: String,
+    pub material_id: Option<i64>,
+    pub qty: f64,
+    pub price_delta: f64,
+}
+
+#[tauri::command]
+pub fn add_order_item_modifier(state: State<AppState>, req: AddModifierRequest) -> Result<(), String> {
+    state.db.add_order_item_modifier(req.order_item_id, &req.modifier_type, req.material_id, req.qty, req.price_delta).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_order_item_modifiers(state: State<AppState>, order_item_id: i64) -> Result<Vec<OrderItemModifier>, String> {
+    state.db.get_order_item_modifiers(order_item_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_order_item_modifier(state: State<AppState>, modifier_id: i64) -> Result<(), String> {
+    state.db.delete_order_item_modifier(modifier_id).map_err(|e| e.to_string())
+}
+
+// ==================== 報表命令 ====================
+
+#[tauri::command]
+pub fn get_sales_report(state: State<AppState>, start_date: String, end_date: String) -> Result<Vec<(String, f64, i64)>, String> {
+    state.db.get_sales_report(&start_date, &end_date).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_sales_by_category(state: State<AppState>, start_date: String, end_date: String) -> Result<Vec<(String, f64, i64)>, String> {
+    state.db.get_sales_by_category(&start_date, &end_date).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_gross_profit_report(state: State<AppState>, start_date: String, end_date: String) -> Result<Vec<(String, f64, f64, f64)>, String> {
+    state.db.get_gross_profit_report(&start_date, &end_date).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_top_selling_items(state: State<AppState>, start_date: String, end_date: String, limit: Option<i64>) -> Result<Vec<(String, f64, i64, f64)>, String> {
+    state.db.get_top_selling_items(&start_date, &end_date, limit.unwrap_or(10)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_material_consumption_report(state: State<AppState>, start_date: String, end_date: String) -> Result<Vec<(String, f64, f64, f64)>, String> {
+    state.db.get_material_consumption_report(&start_date, &end_date).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_report_csv(state: State<AppState>, report_type: String, start_date: String, end_date: String) -> Result<String, String> {
+    let csv = match report_type.as_str() {
+        "sales" => {
+            let data = state.db.get_sales_report(&start_date, &end_date).map_err(|e| e.to_string())?;
+            let mut lines = vec!["日期,销售额,订单数".to_string()];
+            for (date, sales, count) in data {
+                lines.push(format!("{},{:.2},{}", date, sales, count));
+            }
+            lines.join("\n")
+        }
+        "category" => {
+            let data = state.db.get_sales_by_category(&start_date, &end_date).map_err(|e| e.to_string())?;
+            let mut lines = vec!["分类,销售额,订单数".to_string()];
+            for (cat, sales, count) in data {
+                lines.push(format!("{},{:.2},{}", cat, sales, count));
+            }
+            lines.join("\n")
+        }
+        "top_items" => {
+            let data = state.db.get_top_selling_items(&start_date, &end_date, 50).map_err(|e| e.to_string())?;
+            let mut lines = vec!["菜品,销量,订单数,销售额".to_string()];
+            for (name, qty, count, sales) in data {
+                lines.push(format!("{},{:.2},{},{:.2}", name, qty, count, sales));
+            }
+            lines.join("\n")
+        }
+        "material" => {
+            let data = state.db.get_material_consumption_report(&start_date, &end_date).map_err(|e| e.to_string())?;
+            let mut lines = vec!["原料,消耗数量,平均成本,总成本".to_string()];
+            for (name, qty, avg_cost, total) in data {
+                lines.push(format!("{},{:.2},{:.2},{:.2}", name, qty, avg_cost, total));
+            }
+            lines.join("\n")
+        }
+        _ => return Err(format!("不支持的报告类型: {}", report_type)),
+    };
+    Ok(csv)
+}
+
+#[tauri::command]
+pub fn update_recipe_item(state: State<AppState>, item_id: i64, qty: Option<f64>, wastage_rate: Option<f64>, note: Option<String>) -> Result<(), String> {
+    state.db.update_recipe_item(item_id, qty, wastage_rate, note.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_station_menu_items(state: State<AppState>, station_id: i64) -> Result<Vec<MenuItem>, String> {
+    state.db.get_station_menu_items(station_id).map_err(|e| e.to_string())
+}
+
+// ==================== 打印模板命令 ====================
+
+use crate::database::{PrintTemplate, PrintPreviewResult, CreatePrintTemplateRequest};
+
+#[tauri::command]
+pub fn get_print_templates(state: State<AppState>, template_type: Option<String>) -> Result<Vec<PrintTemplate>, String> {
+    state.db.get_print_templates(template_type.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_print_template(state: State<AppState>, id: i64) -> Result<PrintTemplate, String> {
+    state.db.get_print_template(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_print_template(state: State<AppState>, req: CreatePrintTemplateRequest) -> Result<i64, String> {
+    state.db.create_print_template(&req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_print_template(state: State<AppState>, id: i64, name: Option<String>, content: Option<String>, paper_size: Option<String>, label_width_mm: Option<f64>, label_height_mm: Option<f64>, theme: Option<String>, restaurant_name: Option<String>, tagline: Option<String>, logo_data: Option<String>, show_price: Option<bool>, show_tax: Option<bool>, show_service_charge: Option<bool>, item_sort: Option<String>, modifiers_color: Option<String>) -> Result<(), String> {
+    state.db.update_print_template(id, name, content, paper_size, label_width_mm, label_height_mm, theme, restaurant_name, tagline, logo_data, show_price, show_tax, show_service_charge, item_sort, modifiers_color).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_print_template(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_print_template(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_default_template(state: State<AppState>, id: i64, template_type: String) -> Result<(), String> {
+    state.db.set_default_template(id, &template_type).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn render_template_preview(state: State<AppState>, template_id: i64, data: serde_json::Value) -> Result<PrintPreviewResult, String> {
+    state.db.render_template_preview(template_id, &data).map_err(|e| e.to_string())
+}
+
+// ==================== 打印機命令 ====================
+
+#[tauri::command]
+pub fn bind_feie_printer(state: State<AppState>, printer_id: i64, printer_key: String) -> Result<String, String> {
+    let printer = state.db.get_printers().map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == printer_id)
+        .ok_or(format!("打印機 #{} 不存在", printer_id))?;
+    
+    let user = printer.feie_user.as_deref().ok_or("飛鵝用戶未配置")?;
+    let ukey = printer.feie_ukey.as_deref().ok_or("飛鵝 UKEY 未配置")?;
+    let sn = printer.feie_sn.as_deref().ok_or("飛鵝 SN 未配置")?;
+    
+    printer::feie_add_printer(user, ukey, sn, &printer_key)
+}
+
+#[tauri::command]
+pub fn check_printer_status(state: State<AppState>, printer_id: i64) -> Result<String, String> {
+    let printer = state.db.get_printers().map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.id == printer_id)
+        .ok_or(format!("打印機 #{} 不存在", printer_id))?;
+    
+    match printer.connection_type.as_str() {
+        "feie" => {
+            let user = printer.feie_user.as_deref().ok_or("飛鵝用戶未配置")?;
+            let ukey = printer.feie_ukey.as_deref().ok_or("飛鵝 UKEY 未配置")?;
+            let sn = printer.feie_sn.as_deref().ok_or("飛鵝 SN 未配置")?;
+            printer::feie_query_status(user, ukey, sn)
+        }
+        "lan" => {
+            let ip = printer.lan_ip.as_deref().ok_or("局域網 IP 未配置")?;
+            let port = printer.lan_port;
+            printer::check_lan_printer_status(ip, port)
+        }
+        _ => Err(format!("不支持的連接類型"))
+    }
+}
+
+#[tauri::command]
+pub fn get_notifications(state: State<AppState>, limit: Option<i64>, unread_only: Option<bool>) -> Result<Vec<Notification>, String> {
+    state.db.get_notifications(limit.unwrap_or(50), unread_only.unwrap_or(false)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_unread_notification_count(state: State<AppState>) -> Result<i64, String> {
+    state.db.get_unread_count().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mark_notification_read(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.mark_notification_read(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mark_all_notifications_read(state: State<AppState>) -> Result<(), String> {
+    state.db.mark_all_notifications_read().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_notification(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_notification(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn check_and_create_alerts(state: State<AppState>) -> Result<(), String> {
+    state.db.check_and_create_alerts().map_err(|e| e.to_string())
+}
+
+// ==================== 会员系统命令 ====================
+
+#[tauri::command]
+pub fn get_customers(state: State<AppState>) -> Result<Vec<Customer>, String> {
+    state.db.get_customers().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_customer(state: State<AppState>, name: Option<String>, phone: Option<String>, wechat_openid: Option<String>) -> Result<i64, String> {
+    state.db.create_customer(name.as_deref(), phone.as_deref(), wechat_openid.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_customer_points(state: State<AppState>, customer_id: i64, points_delta: i64) -> Result<(), String> {
+    state.db.update_customer_points(customer_id, points_delta).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_customer_balance(state: State<AppState>, customer_id: i64, balance_delta: f64) -> Result<(), String> {
+    state.db.update_customer_balance(customer_id, balance_delta).map_err(|e| e.to_string())
+}
+
+// ==================== 优惠券命令 ====================
+
+#[tauri::command]
+pub fn get_coupons(state: State<AppState>) -> Result<Vec<Coupon>, String> {
+    state.db.get_coupons().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_coupon(state: State<AppState>, name: String, code: String, discount_percent: Option<f64>, discount_amount: Option<f64>, min_amount: Option<f64>, valid_from: Option<String>, valid_until: Option<String>) -> Result<i64, String> {
+    state.db.create_coupon(&name, &code, discount_percent, discount_amount, min_amount, valid_from.as_deref(), valid_until.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn use_coupon(state: State<AppState>, customer_id: i64, coupon_id: i64) -> Result<(), String> {
+    state.db.use_coupon(customer_id, coupon_id).map_err(|e| e.to_string())
+}
+
+// ==================== 门店命令 ====================
+
+#[tauri::command]
+pub fn get_stores(state: State<AppState>) -> Result<Vec<(i64, String, String)>, String> {
+    state.db.get_stores().map_err(|e| e.to_string())
+}
+
+// ==================== 打印調試命令 ====================
+
+use crate::printer::DebugPrintResult;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DebugKitchenTicketRequest {
+    pub order_no: String,
+    pub dine_type: String,
+    pub items: Vec<(String, f64, Option<String>)>,
+    pub note: Option<String>,
+    pub filename: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DebugBatchLabelRequest {
+    pub lot_no: String,
+    pub material_name: String,
+    pub quantity: f64,
+    pub unit: String,
+    pub expiry_date: Option<String>,
+    pub supplier_name: Option<String>,
+    pub filename: Option<String>,
+}
+
+#[tauri::command]
+pub fn debug_print_kitchen_ticket(req: DebugKitchenTicketRequest) -> Result<DebugPrintResult, String> {
+    let items: Vec<(String, f64, Option<String>)> = req.items;
+    crate::printer::save_kitchen_ticket_to_file(
+        &req.order_no,
+        &req.dine_type,
+        &items,
+        req.note.as_deref(),
+        req.filename.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn debug_print_batch_label(req: DebugBatchLabelRequest) -> Result<DebugPrintResult, String> {
+    crate::printer::save_batch_label_to_file(
+        &req.lot_no,
+        &req.material_name,
+        req.quantity,
+        &req.unit,
+        req.expiry_date.as_deref(),
+        req.supplier_name.as_deref(),
+        req.filename.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn debug_print_escpos(content: String, filename: Option<String>) -> Result<DebugPrintResult, String> {
+    let mut builder = crate::printer::EscPosBuilder::new();
+    builder.text_ln(&content);
+    crate::printer::save_escpos_to_file(builder, filename.as_deref())
+}

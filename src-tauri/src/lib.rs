@@ -1,0 +1,190 @@
+mod database;
+mod commands;
+mod printer;
+
+use commands::AppState;
+use database::Database;
+use std::fs;
+use std::path::PathBuf;
+
+fn get_db_path() -> PathBuf {
+    // 獲取應用數據目錄
+    let data_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Cuckoo");
+    
+    // 確保目錄存在
+    fs::create_dir_all(&data_dir).expect("Failed to create data directory");
+    
+    data_dir.join("cuckoo.db")
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let db_path = get_db_path();
+    log::info!("Database path: {:?}", db_path);
+    
+    let db = Database::new(db_path.to_str().unwrap()).expect("Failed to create database");
+    
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .manage(AppState { db })
+        .invoke_handler(tauri::generate_handler![
+            // 健康檢查
+            commands::health_check,
+            // 單位
+            commands::get_units,
+            // 材料分類
+            commands::get_material_categories,
+            commands::create_material_category,
+            // 標籤
+            commands::get_tags,
+            commands::create_tag,
+            // 材料
+            commands::get_materials,
+            commands::create_material,
+            commands::add_material_tags,
+            // 材料狀態
+            commands::get_material_states,
+            commands::create_material_state,
+            commands::get_all_material_states,
+            commands::update_material_state,
+            commands::delete_material_state,
+            // 供應商
+            commands::get_suppliers,
+            commands::create_supplier,
+            // 屬性模板
+            commands::get_attribute_templates,
+            commands::set_entity_attribute,
+            commands::get_entity_attributes,
+            // 配方
+            commands::get_recipes,
+            commands::get_recipe_with_items,
+            commands::create_recipe,
+            commands::add_recipe_item,
+            commands::calculate_recipe_cost,
+            // 菜單
+            commands::get_menu_categories,
+            commands::create_menu_category,
+            commands::get_menu_items,
+            commands::create_menu_item,
+            commands::get_menu_item_specs,
+            commands::create_menu_item_spec,
+            commands::update_menu_item_spec,
+            commands::delete_menu_item_spec,
+            commands::get_menu_items_for_pos,
+            // 訂單
+            commands::create_order,
+            commands::get_orders,
+            commands::get_order_with_items,
+            commands::add_order_item,
+            commands::submit_order,
+            commands::cancel_order,
+            // KDS
+            commands::get_kitchen_stations,
+            commands::get_station_tickets,
+            commands::get_all_tickets,
+            commands::get_all_tickets_with_items,
+            commands::start_ticket,
+            commands::finish_ticket,
+            // 庫存
+            commands::get_inventory_batches,
+            commands::get_inventory_summary,
+            commands::create_inventory_txn,
+            commands::get_inventory_txns,
+            commands::create_inventory_batch,
+            commands::delete_inventory_batch,
+            commands::adjust_inventory,
+            commands::record_wastage,
+            // 更新/刪除
+            commands::update_material,
+            commands::delete_material,
+            commands::update_material_category,
+            commands::delete_material_category,
+            commands::update_tag,
+            commands::delete_tag,
+            commands::remove_material_tag,
+            commands::update_supplier,
+            commands::delete_supplier,
+            commands::update_menu_item,
+            commands::toggle_menu_item_availability,
+            commands::delete_menu_item,
+            commands::update_menu_category,
+            commands::delete_menu_category,
+            commands::update_recipe,
+            commands::delete_recipe,
+            commands::delete_recipe_item,
+            commands::add_station_menu_item,
+            commands::remove_station_menu_item,
+            // 打印機
+            commands::get_printers,
+            commands::get_default_printer,
+            commands::create_printer,
+            commands::update_printer,
+            commands::delete_printer,
+            commands::scan_lan_printers,
+            commands::test_feie_printer,
+            commands::test_lan_printer,
+            commands::send_print_task,
+            commands::print_kitchen_ticket,
+            commands::print_batch_label,
+            commands::get_print_tasks,
+            // 採購單
+            commands::get_purchase_orders,
+            commands::get_purchase_order_with_items,
+            commands::create_purchase_order,
+            commands::add_purchase_order_item,
+            commands::update_purchase_order_status,
+            commands::delete_purchase_order,
+            commands::receive_purchase_order,
+            // 生產單
+            commands::get_production_orders,
+            commands::get_production_order_with_items,
+            commands::create_production_order,
+            commands::start_production_order,
+            commands::complete_production_order,
+            commands::delete_production_order,
+            // 盤點
+            commands::get_stocktakes,
+            commands::get_stocktake_with_items,
+            commands::create_stocktake,
+            commands::update_stocktake_item,
+            commands::complete_stocktake,
+            commands::delete_stocktake,
+            // 加料/去料
+            commands::add_order_item_modifier,
+            commands::get_order_item_modifiers,
+            commands::delete_order_item_modifier,
+            // 報表
+            commands::get_sales_report,
+            commands::get_sales_by_category,
+            commands::get_gross_profit_report,
+            commands::get_top_selling_items,
+            commands::get_material_consumption_report,
+            // 配方項目更新
+            commands::update_recipe_item,
+            // 工作站菜單映射
+            commands::get_station_menu_items,
+            // 打印模板
+            commands::get_print_templates,
+            commands::get_print_template,
+            commands::create_print_template,
+            commands::update_print_template,
+            commands::delete_print_template,
+            commands::set_default_template,
+            commands::render_template_preview,
+            // 通知系统
+            commands::get_notifications,
+            commands::get_unread_notification_count,
+            commands::mark_notification_read,
+            commands::mark_all_notifications_read,
+            commands::delete_notification,
+            commands::check_and_create_alerts,
+            // 打印調試
+            commands::debug_print_kitchen_ticket,
+            commands::debug_print_batch_label,
+            commands::debug_print_escpos,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
