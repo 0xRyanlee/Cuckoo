@@ -19,6 +19,7 @@ export function PrintPreviewPage() {
   const [activeTab, setActiveTab] = useState<"kitchen" | "label" | "raw">("kitchen");
   const [result, setResult] = useState<DebugPrintResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showMockOnly, setShowMockOnly] = useState(false);
 
   // Kitchen ticket form
   const [orderNo, setOrderNo] = useState("ORD20260424001");
@@ -41,6 +42,94 @@ export function PrintPreviewPage() {
   // Raw ESC/POS
   const [rawContent, setRawContent] = useState("測試打印內容\\n第二行");
   const [filename, setFilename] = useState("");
+
+  // Parse items for mockup
+  const parseItems = () => {
+    try {
+      return JSON.parse(itemsJson);
+    } catch {
+      return [];
+    }
+  };
+
+  // Mockup render helpers
+  const renderKitchenMockup = () => {
+    const items = parseItems();
+    return (
+      <div className="thermal-paper font-mono text-xs leading-tight">
+        <div className="text-center border-b-2 border-dashed border-gray-400 pb-2 mb-2">
+          <div className="text-lg font-bold">廚房單</div>
+          <div className="text-sm">ORDER: {orderNo}</div>
+          <div className="text-xs bg-black text-white inline-block px-2 py-0.5 mt-1 rounded">
+            {dineType}
+          </div>
+        </div>
+        <div className="space-y-1">
+          {items.map((item: any[], idx: number) => (
+            <div key={idx} className="flex justify-between items-start">
+              <span className="flex-1">
+                {item[1]}x {item[0]}
+                {item[2] && <span className="text-orange-600 text-xs"> ({item[2]})</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+        {ticketNote && (
+          <div className="mt-2 pt-2 border-t border-dashed border-gray-400 text-orange-600 text-xs">
+            備註: {ticketNote}
+          </div>
+        )}
+        <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-center text-xs text-gray-500">
+          <div>{new Date().toLocaleString()}</div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderLabelMockup = () => {
+    return (
+      <div className="thermal-paper font-mono text-xs leading-tight">
+        <div className="text-center border-b-2 border-gray-800 pb-2 mb-2">
+          <div className="text-lg font-bold">{materialName}</div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex justify-between">
+            <span className="text-gray-600">批次:</span>
+            <span className="font-bold">{lotNo}</span>
+          </div>
+          <div className="flex justify-between text-lg">
+            <span className="font-bold">{quantity}</span>
+            <span className="font-bold">{unit}</span>
+          </div>
+          {expiryDate && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">效期:</span>
+              <span className="text-red-600 font-bold">{expiryDate}</span>
+            </div>
+          )}
+          {supplierName && (
+            <div className="text-xs text-gray-600 mt-1 pt-1 border-t border-dashed">
+              {supplierName}
+            </div>
+          )}
+        </div>
+        <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-center">
+          <div className="text-xs text-gray-400">▮▮▮▮▮▮▮▮▮▮▮▮▮</div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRawMockup = () => {
+    const lines = rawContent.split("\\n").map(l => l.trim()).filter(Boolean);
+    return (
+      <div className="thermal-paper font-mono text-xs leading-normal whitespace-pre-wrap">
+        {lines.map((line, idx) => (
+          <div key={idx}>{line}</div>
+        ))}
+      </div>
+    );
+  };
 
   async function handlePrintKitchen() {
     setLoading(true);
@@ -156,98 +245,183 @@ export function PrintPreviewPage() {
 
       {/* Kitchen Ticket Form */}
       {activeTab === "kitchen" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>廚房單參數</CardTitle>
-            <CardDescription>設置訂單信息以生成廚房單預覽</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>訂單號</Label>
-                <Input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>廚房單參數</CardTitle>
+              <CardDescription>設置訂單信息以生成廚房單預覽</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>訂單號</Label>
+                  <Input value={orderNo} onChange={(e) => setOrderNo(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>用餐類型</Label>
+                  <Select value={dineType} onValueChange={setDineType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="堂食">堂食</SelectItem>
+                      <SelectItem value="外賣">外賣</SelectItem>
+                      <SelectItem value="自取">自取</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>用餐類型</Label>
-                <Select value={dineType} onValueChange={setDineType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="堂食">堂食</SelectItem>
-                    <SelectItem value="外賣">外賣</SelectItem>
-                    <SelectItem value="自取">自取</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>菜品列表 (JSON)</Label>
+                <Textarea value={itemsJson} onChange={(e) => setItemsJson(e.target.value)} rows={5} className="font-mono text-sm" />
+                <p className="text-xs text-muted-foreground">格式: [["菜名", 數量, "備註"], ...]</p>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>菜品列表 (JSON)</Label>
-              <Textarea value={itemsJson} onChange={(e) => setItemsJson(e.target.value)} rows={5} className="font-mono text-sm" />
-              <p className="text-xs text-muted-foreground">格式: [["菜名", 數量, "備註"], ...]</p>
-            </div>
-            <div className="space-y-2">
-              <Label>訂單備註</Label>
-              <Input value={ticketNote} onChange={(e) => setTicketNote(e.target.value)} placeholder="可選" />
-            </div>
-            <div className="space-y-2">
-              <Label>文件名 (可選)</Label>
-              <Input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="debug_kitchen" />
-            </div>
-            <Button onClick={handlePrintKitchen} disabled={loading} className="w-full">
-              <Printer className="h-4 w-4 mr-2" />
-              {loading ? "生成中..." : "生成廚房單預覽"}
-            </Button>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <Label>訂單備註</Label>
+                <Input value={ticketNote} onChange={(e) => setTicketNote(e.target.value)} placeholder="可選" />
+              </div>
+              <div className="space-y-2">
+                <Label>文件名 (可選)</Label>
+                <Input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="debug_kitchen" />
+              </div>
+              <Button onClick={handlePrintKitchen} disabled={loading} className="w-full">
+                <Printer className="h-4 w-4 mr-2" />
+                {loading ? "生成中..." : "生成廚房單預覽"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Real-time Mockup */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>即時預覽</span>
+                <Button variant="outline" size="sm" onClick={() => setShowMockOnly(!showMockOnly)}>
+                  {showMockOnly ? "僅預覽" : "顯示實際"}
+                </Button>
+              </CardTitle>
+              <CardDescription>實時模擬熱敏紙打印效果</CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center bg-gray-100 p-4 rounded-lg overflow-auto max-h-[500px]">
+              <div className="bg-white p-3 rounded-sm shadow-lg" style={{ width: "280px", minHeight: "200px" }}>
+                {renderKitchenMockup()}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* Batch Label Form */}
+{/* Batch Label Form */}
       {activeTab === "label" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>批次標籤參數</CardTitle>
-            <CardDescription>設置材料信息以生成批次標籤預覽</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>批次號</Label>
-                <Input value={lotNo} onChange={(e) => setLotNo(e.target.value)} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>批次標籤參數</CardTitle>
+              <CardDescription>設置材料信息以生成批次標籤預覽</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>批次號</Label>
+                  <Input value={lotNo} onChange={(e) => setLotNo(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>材料名稱</Label>
+                  <Input value={materialName} onChange={(e) => setMaterialName(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>數量</Label>
+                  <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>單位</Label>
+                  <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>到期日期</Label>
+                  <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>供應商</Label>
+                  <Input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="可選" />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>材料名稱</Label>
-                <Input value={materialName} onChange={(e) => setMaterialName(e.target.value)} />
+                <Label>文件名 (可選)</Label>
+                <Input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="debug_label" />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+              <Button onClick={handlePrintLabel} disabled={loading} className="w-full">
+                <Tag className="h-4 w-4 mr-2" />
+                {loading ? "生成中..." : "生成標籤預覽"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Real-time Mockup */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>即時預覽</span>
+                <Button variant="outline" size="sm" onClick={() => setShowMockOnly(!showMockOnly)}>
+                  {showMockOnly ? "僅預覽" : "顯示實際"}
+                </Button>
+              </CardTitle>
+              <CardDescription>實時模擬熱敏紙打印效果</CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center bg-gray-100 p-4 rounded-lg overflow-auto max-h-[500px]">
+              <div className="bg-white p-3 rounded-sm shadow-lg" style={{ width: "200px", minHeight: "150px" }}>
+                {renderLabelMockup()}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Raw ESC/POS Form */}
+      {activeTab === "raw" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>原始 ESC/POS 指令</CardTitle>
+              <CardDescription>輸入自定義文本內容生成 ESC/POS 指令</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>數量</Label>
-                <Input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                <Label>打印內容</Label>
+                <Textarea value={rawContent} onChange={(e) => setRawContent(e.target.value)} rows={6} className="font-mono text-sm" />
+                <p className="text-xs text-muted-foreground">使用 \n 表示換行</p>
               </div>
               <div className="space-y-2">
-                <Label>單位</Label>
-                <Input value={unit} onChange={(e) => setUnit(e.target.value)} />
+                <Label>文件名 (可選)</Label>
+                <Input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="debug_raw" />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>到期日期</Label>
-                <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+              <Button onClick={handlePrintRaw} disabled={loading} className="w-full">
+                <Printer className="h-4 w-4 mr-2" />
+                {loading ? "生成中..." : "生成 ESC/POS 指令"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Real-time Mockup */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>即時預覽</span>
+                <Button variant="outline" size="sm" onClick={() => setShowMockOnly(!showMockOnly)}>
+                  {showMockOnly ? "僅預覽" : "顯示實際"}
+                </Button>
+              </CardTitle>
+              <CardDescription>實時模擬熱敏紙打印效果</CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center bg-gray-100 p-4 rounded-lg overflow-auto max-h-[500px]">
+              <div className="bg-white p-3 rounded-sm shadow-lg" style={{ width: "280px", minHeight: "150px" }}>
+                {renderRawMockup()}
               </div>
-              <div className="space-y-2">
-                <Label>供應商</Label>
-                <Input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} placeholder="可選" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>文件名 (可選)</Label>
-              <Input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="debug_label" />
-            </div>
-            <Button onClick={handlePrintLabel} disabled={loading} className="w-full">
-              <Tag className="h-4 w-4 mr-2" />
-              {loading ? "生成中..." : "生成標籤預覽"}
-            </Button>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Raw ESC/POS Form */}

@@ -23,6 +23,7 @@ import { StocktakesPage } from "@/pages/stocktakes-page";
 import { ReportsPage } from "@/pages/reports-page";
 import { PrintTemplatesPage } from "@/pages/print-templates-page";
 import { PrintSettingsPage } from "@/pages/print-settings-page";
+import { PrintPreviewPage } from "@/pages/print-preview-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -572,6 +573,7 @@ function App() {
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/print-templates" element={<PrintTemplatesPage />} />
                 <Route path="/print-settings" element={<PrintSettingsPage />} />
+                <Route path="/print-preview" element={<PrintPreviewPage />} />
                 <Route path="*" element={<DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />} />
               </Routes>
             </main>

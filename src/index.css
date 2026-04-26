@@ -142,3 +142,72 @@
 .animate-stagger {
   animation: stagger-in 0.2s ease-out both;
 }
+
+/* Thermal Paper Effect */
+.thermal-paper {
+  /* Base thermal paper appearance - slightly yellowish paper */
+  background-color: #f5f0e6;
+  background-image: 
+    /* Subtle paper texture */
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.02) 1px,
+      rgba(0, 0, 0, 0.02) 2px
+    ),
+    /* Very subtle vertical grain */
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.01) 1px,
+      rgba(0, 0, 0, 0.01) 2px
+    );
+  color: #1a1a1a;
+  /* Thermal print look - slightly faded edges */
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.3);
+  /* Padding like real thermal paper edge */
+  padding: 8px;
+  /* Slight aging/yellowing at edges */
+  box-shadow: 
+    inset 0 0 30px rgba(139, 119, 101, 0.08),
+    /* Torn edge effect at bottom */
+    inset 0 -3px 8px -3px rgba(0, 0, 0, 0.1);
+  /* Prevent overflow */
+  overflow: hidden;
+  word-wrap: break-word;
+  /* Print density variation */
+  filter: contrast(1.05) brightness(0.98);
+}
+
+/* Dotted tear line for paper cuts */
+.thermal-paper::after {
+  content: "";
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 6px,
+    rgba(0, 0, 0, 0.15) 6px,
+    rgba(0, 0, 0, 0.15) 8px
+  );
+}
+
+/* Overflow text indicator */
+.thermal-paper .overflow-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  color: #f5f0e6;
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 2px;
+}
