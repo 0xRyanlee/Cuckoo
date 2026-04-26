@@ -3303,8 +3303,10 @@ Ok(())
 
     pub fn set_default_ticket_type(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("UPDATE print_ticket_types SET is_default = 0", [])?;
-        conn.execute("UPDATE print_ticket_types SET is_default = 1 WHERE id = ?1", params![id])?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute("UPDATE print_ticket_types SET is_default = 0", [])?;
+        tx.execute("UPDATE print_ticket_types SET is_default = 1 WHERE id = ?1", params![id])?;
+        tx.commit()?;
         Ok(())
     }
 
