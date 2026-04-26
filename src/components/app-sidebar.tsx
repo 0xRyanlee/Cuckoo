@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Package, ChefHat, Warehouse, Tag, FileText, ShoppingCart, Settings, Home, User, LogOut, CreditCard, Truck, ClipboardList, Factory, FileBox, BarChart3, Printer } from "lucide-react";
+import { MoreHorizontal, Package, ChefHat, Warehouse, FileText, ShoppingCart, Settings, Home, User, LogOut, CreditCard, Truck, ClipboardList, Factory, FileBox, BarChart3, Printer, Monitor, Layers, SlidersHorizontal } from "lucide-react";
 
 const navGroups = [
   {
@@ -39,18 +39,18 @@ const navGroups = [
       { id: "pos", label: "POS 点餐", icon: CreditCard },
       { id: "menu", label: "菜单", icon: FileText },
       { id: "orders", label: "订单", icon: ShoppingCart },
-      { id: "kds", label: "KDS 厨房", icon: Tag },
+      { id: "kds", label: "KDS 厨房", icon: Monitor },
       { id: "suppliers", label: "供应商", icon: Truck },
       { id: "purchase-orders", label: "采购单", icon: FileBox },
       { id: "production-orders", label: "生产单", icon: Factory },
       { id: "stocktakes", label: "库存盘点", icon: ClipboardList },
-      { id: "material-states", label: "材料状态", icon: Tag },
+      { id: "material-states", label: "材料状态", icon: Layers },
     ],
   },
   {
     label: "系统",
     items: [
-      { id: "attributes", label: "属性模板", icon: Tag },
+      { id: "attributes", label: "属性模板", icon: SlidersHorizontal },
       { id: "print-templates", label: "打印模板", icon: Printer },
       { id: "print-preview", label: "打印预览", icon: Printer },
       { id: "reports", label: "数据报表", icon: BarChart3 },

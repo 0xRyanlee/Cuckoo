@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,12 @@ interface PrintTemplatesPageProps {
   onPreview?: (templateId: number, data: Record<string, unknown>) => void;
 }
 
+interface PreviewResult {
+  html: string;
+  lines: string[];
+  paper_width: string;
+}
+
 export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
   const [templates, setTemplates] = useState<PrintTemplate[]>([]);
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -47,6 +53,8 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
   const [editingTemplate, setEditingTemplate] = useState<PrintTemplate | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewLines, setPreviewLines] = useState<string[]>([]);
+  const [livePreviewHtml, setLivePreviewHtml] = useState("");
+  const [livePreviewError, setLivePreviewError] = useState("");
 
   const [formName, setFormName] = useState("");
   const [formType, setFormType] = useState("kitchen_ticket");
@@ -63,6 +71,8 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
   const [formShowServiceCharge, setFormShowServiceCharge] = useState(true);
   const [formItemSort, setFormItemSort] = useState("entry");
   const [formModifiersColor, setFormModifiersColor] = useState("red");
+
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function loadTemplates() {
     try {
@@ -84,6 +94,17 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
     setFormLabelWidth("");
     setFormLabelHeight("");
     setFormContent(JSON.stringify(defaultKitchenTemplate, null, 2));
+    setFormTheme("classic");
+    setFormRestaurantName("");
+    setFormTagline("");
+    setFormLogoData("");
+    setFormShowPrice(true);
+    setFormShowTax(true);
+    setFormShowServiceCharge(true);
+    setFormItemSort("entry");
+    setFormModifiersColor("red");
+    setLivePreviewHtml("");
+    setLivePreviewError("");
     setEditDialogOpen(true);
   }
 
@@ -104,6 +125,8 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
     setFormShowServiceCharge(tpl.show_service_charge ?? true);
     setFormItemSort(tpl.item_sort || "entry");
     setFormModifiersColor(tpl.modifiers_color || "red");
+    setLivePreviewHtml("");
+    setLivePreviewError("");
     setEditDialogOpen(true);
   }
 
@@ -179,7 +202,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       : { lot_no: "LOT-20260423-001", material_name: "雞胸肉", quantity: 10, unit: "kg", expiry_date: "2026-05-01", supplier_name: "鮮肉供應商" };
 
     try {
-      const result = await invoke<{ html: string; lines: string[]; paper_width: string }>("render_template_preview", { templateId: tpl.id, data: sampleData });
+      const result = await invoke<PreviewResult>("render_template_preview", { templateId: tpl.id, data: sampleData });
       setPreviewHtml(result.html);
       setPreviewLines(result.lines);
       setPreviewDialogOpen(true);
@@ -187,6 +210,50 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       console.error("預覽失敗:", e);
     }
   }
+
+  const updateLivePreview = useCallback(async (
+    content: string,
+    paperSize: string,
+    theme: string,
+    restaurantName: string,
+    tagline: string,
+    logoData: string,
+  ) => {
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current);
+    }
+
+    previewTimerRef.current = setTimeout(async () => {
+      try {
+        const sampleData = {
+          order_no: "ORD20260424001",
+          dine_type: "堂食",
+          time: "2026-04-24 14:30",
+          items: [
+            { name: "宮保雞丁", qty: 2, note: "少辣" },
+            { name: "麻婆豆腐", qty: 1, note: null },
+            { name: "酸菜魚", qty: 1, note: "加辣" },
+          ],
+          note: "加急處理",
+        };
+
+        const result = await invoke<PreviewResult>("render_template_content_preview", {
+          content,
+          paperSize,
+          theme,
+          restaurantName,
+          tagline,
+          logoData: logoData || null,
+          data: sampleData,
+        });
+        setLivePreviewHtml(result.html);
+        setLivePreviewError("");
+      } catch (e: any) {
+        setLivePreviewHtml("");
+        setLivePreviewError(e.toString());
+      }
+    }, 400);
+  }, []);
 
   const getTypeLabel = (type: string) => {
     switch (type) {
@@ -256,128 +323,107 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
         )}
       </div>
 
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { setEditDialogOpen(open); if (!open) { setLivePreviewHtml(""); setLivePreviewError(""); } }}>
+        <DialogContent className="max-w-7xl max-h-[95vh]">
           <DialogHeader>
             <DialogTitle>{editingTemplate ? "编辑模板" : "新增模板"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>模板名称</Label>
-                <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="如：标准厨房单" />
+          <div className="flex flex-col lg:flex-row gap-4 h-[70vh]">
+            {/* 左側：表單 */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>模板名称</Label>
+                  <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="如：标准厨房单" />
+                </div>
+                <div className="space-y-2">
+                  <Label>模板類型</Label>
+                  <Select value={formType} onValueChange={(v) => { setFormType(v); if (v === "kitchen_ticket") { setFormContent(JSON.stringify(defaultKitchenTemplate, null, 2)); } else { setFormContent(JSON.stringify(defaultBatchLabelTemplate, null, 2)); } }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="kitchen_ticket">厨房单</SelectItem>
+                      <SelectItem value="batch_label">批次标签</SelectItem>
+                      <SelectItem value="receipt">收据</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              
+              <Separator />
+              
               <div className="space-y-2">
-                <Label>模板類型</Label>
-                <Select value={formType} onValueChange={(v) => { setFormType(v); if (v === "kitchen_ticket") { setFormContent(JSON.stringify(defaultKitchenTemplate, null, 2)); } else { setFormContent(JSON.stringify(defaultBatchLabelTemplate, null, 2)); } }}>
+                <Label>纸张尺寸</Label>
+                <Select value={formPaperSize} onValueChange={(v) => { setFormPaperSize(v); updateLivePreview(formContent, v, formTheme, formRestaurantName, formTagline, formLogoData); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="kitchen_ticket">厨房单</SelectItem>
-                    <SelectItem value="batch_label">批次标签</SelectItem>
-                    <SelectItem value="receipt">收据</SelectItem>
+                    <SelectItem value="58mm">58mm 热敏</SelectItem>
+                    <SelectItem value="80mm">80mm 热敏</SelectItem>
+                    <SelectItem value="custom">自定义标签</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            
-            <Separator />
-            <div className="space-y-2">
-              <Label className="text-base font-semibold">主题与品牌</Label>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>主题风格</Label>
-                  <Select value={formTheme} onValueChange={setFormTheme}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="classic">经典 (Classic)</SelectItem>
-                      <SelectItem value="minimal">简约 (Minimal)</SelectItem>
-                      <SelectItem value="modern">现代 (Modern)</SelectItem>
-                    </SelectContent>
-                  </Select>
+              
+              <div className="space-y-2">
+                <Label>标签宽度 / 高度 (mm)</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input type="number" value={formLabelWidth} onChange={(e) => setFormLabelWidth(e.target.value)} placeholder="60" disabled={formPaperSize !== "custom"} />
+                  <Input type="number" value={formLabelHeight} onChange={(e) => setFormLabelHeight(e.target.value)} placeholder="40" disabled={formPaperSize !== "custom"} />
                 </div>
+              </div>
+              
+              <Separator />
+              
+              <div className="space-y-2">
+                <Label>主题风格</Label>
+                <Select value={formTheme} onValueChange={(v) => { setFormTheme(v); updateLivePreview(formContent, formPaperSize, v, formRestaurantName, formTagline, formLogoData); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="classic">经典 (Classic)</SelectItem>
+                    <SelectItem value="minimal">简约 (Minimal)</SelectItem>
+                    <SelectItem value="modern">现代 (Modern)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>餐厅名称</Label>
-                  <Input value={formRestaurantName} onChange={(e) => setFormRestaurantName(e.target.value)} placeholder="Cuckoo 餐厅" />
+                  <Input value={formRestaurantName} onChange={(e) => { setFormRestaurantName(e.target.value); updateLivePreview(formContent, formPaperSize, formTheme, e.target.value, formTagline, formLogoData); }} placeholder="Cuckoo 餐厅" />
                 </div>
                 <div className="space-y-2">
                   <Label>标语 (Tagline)</Label>
-                  <Input value={formTagline} onChange={(e) => setFormTagline(e.target.value)} placeholder="用心做好每一道菜" />
+                  <Input value={formTagline} onChange={(e) => { setFormTagline(e.target.value); updateLivePreview(formContent, formPaperSize, formTheme, formRestaurantName, e.target.value, formLogoData); }} placeholder="用心做好每一道菜" />
                 </div>
+              </div>
+              
+              <Separator />
+              
+              <div className="space-y-2">
+                <Label>模板內容 (JSON)</Label>
+                <Textarea value={formContent} onChange={(e) => { setFormContent(e.target.value); updateLivePreview(e.target.value, formPaperSize, formTheme, formRestaurantName, formTagline, formLogoData); }} rows={12} className="font-mono text-xs" />
+                <p className="text-xs text-muted-foreground">支持元素类型：text, separator, blank_lines, items。使用 {"{{variable}}"} 作为占位符。</p>
               </div>
             </div>
             
-            <div className="space-y-2">
-              <Label>Logo (Base64 或 URL)</Label>
-              <Input value={formLogoData} onChange={(e) => setFormLogoData(e.target.value)} placeholder="data:image/png;base64,..." />
-            </div>
-            
-            <Separator />
-            <div className="space-y-2">
-              <Label className="text-base font-semibold">显示选项</Label>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>纸张尺寸</Label>
-                  <Select value={formPaperSize} onValueChange={setFormPaperSize}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="58mm">58mm 热敏</SelectItem>
-                      <SelectItem value="80mm">80mm 热敏</SelectItem>
-                      <SelectItem value="custom">自定义标签</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>餐点排序</Label>
-                  <Select value={formItemSort} onValueChange={setFormItemSort}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="entry">按点单顺序</SelectItem>
-                      <SelectItem value="station">按工作站</SelectItem>
-                      <SelectItem value="seat">按座位</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>变体颜色</Label>
-                  <Select value={formModifiersColor} onValueChange={setFormModifiersColor}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="red">红色</SelectItem>
-                      <SelectItem value="bold">加粗</SelectItem>
-                      <SelectItem value="underline">下划线</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* 右側：預覽 */}
+            <div className="w-full lg:w-1/2 flex flex-col">
+              <Label className="text-base font-semibold mb-2 flex items-center gap-2">
+                <Eye className="h-4 w-4" />实时预览
+              </Label>
+              <div className="flex-1 border rounded-lg p-4 bg-muted/30 overflow-auto">
+                {livePreviewError ? (
+                  <div className="text-sm text-destructive p-4">
+                    <p className="font-medium mb-1">预览错误</p>
+                    <pre className="text-xs whitespace-pre-wrap">{livePreviewError}</pre>
+                  </div>
+                ) : livePreviewHtml ? (
+                  <div dangerouslySetInnerHTML={{ __html: livePreviewHtml }} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                    编辑以查看预览
+                  </div>
+                )}
               </div>
-              <div className="flex gap-4 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={formShowPrice} onChange={(e) => setFormShowPrice(e.target.checked)} className="rounded" />
-                  <span>显示价目</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={formShowTax} onChange={(e) => setFormShowTax(e.target.checked)} className="rounded" />
-                  <span>显示税额</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={formShowServiceCharge} onChange={(e) => setFormShowServiceCharge(e.target.checked)} className="rounded" />
-                  <span>显示服务费</span>
-                </label>
-              </div>
-            </div>
-            
-            <Separator />
-            <div className="space-y-2">
-              <Label>标签宽度 / 高度 (mm)</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <Input type="number" value={formLabelWidth} onChange={(e) => setFormLabelWidth(e.target.value)} placeholder="60" disabled={formPaperSize !== "custom"} />
-                <Input type="number" value={formLabelHeight} onChange={(e) => setFormLabelHeight(e.target.value)} placeholder="40" disabled={formPaperSize !== "custom"} />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>模板內容 (JSON)</Label>
-              <Textarea value={formContent} onChange={(e) => setFormContent(e.target.value)} rows={12} className="font-mono text-xs" />
-              <p className="text-xs text-muted-foreground">支持元素类型：text, separator, blank_lines, items。使用 {"{{variable}}"} 作为占位符。</p>
             </div>
           </div>
           <DialogFooter>

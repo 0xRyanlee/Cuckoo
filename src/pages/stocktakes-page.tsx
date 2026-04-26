@@ -191,7 +191,9 @@ export function StocktakesPage({
                                   autoFocus
                                 />
                                 <Button size="sm" className="h-6 px-2 text-xs" onClick={() => {
-                                  onUpdateItem(item.id, parseFloat(editingActualQty) || 0);
+                                  const qty = parseFloat(editingActualQty);
+                                  if (editingActualQty === "" || isNaN(qty) || qty < 0) return;
+                                  onUpdateItem(item.id, qty);
                                   setEditingItemId(null);
                                 }}>確認</Button>
                               </>

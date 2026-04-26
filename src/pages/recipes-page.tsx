@@ -107,6 +107,7 @@ export function RecipesPage({
   const [editRecipeOutputQty, setEditRecipeOutputQty] = useState("");
 
   const [addItemRecipeId, setAddItemRecipeId] = useState<number | null>(null);
+  const [addItemType, setAddItemType] = useState<"material" | "sub_recipe">("material");
   const [addItemMaterial, setAddItemMaterial] = useState("");
   const [addItemQty, setAddItemQty] = useState("");
   const [addItemUnit, setAddItemUnit] = useState("");
@@ -128,6 +129,7 @@ export function RecipesPage({
 
   function openAddItem(recipeId: number) {
     setAddItemRecipeId(recipeId);
+    setAddItemType("material");
     setAddItemMaterial("");
     setAddItemQty("");
     setAddItemUnit("");
@@ -136,20 +138,26 @@ export function RecipesPage({
 
   function saveAddItem() {
     if (!addItemRecipeId || !addItemMaterial || !addItemQty || !addItemUnit) return;
+    const qty = parseFloat(addItemQty);
+    if (isNaN(qty) || qty <= 0) return;
     onAddRecipeItem(
       addItemRecipeId,
-      "material",
+      addItemType,
       parseInt(addItemMaterial),
-      parseFloat(addItemQty),
+      qty,
       parseInt(addItemUnit),
       parseFloat(addItemWastage) || 0,
     );
     setAddItemRecipeId(null);
   }
 
-  function getMaterialName(refId: number): string {
+  function getRefName(itemType: string, refId: number): string {
+    if (itemType === "sub_recipe") {
+      return recipes.find((r) => r.id === refId)?.name || `配方 #${refId}`;
+    }
     return materials.find((m) => m.id === refId)?.name || `材料 #${refId}`;
   }
+
 
   function getUnitName(unitId: number): string {
     return units.find((u) => u.id === unitId)?.name || `單位 #${unitId}`;
@@ -260,16 +268,19 @@ export function RecipesPage({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>材料</TableHead>
+                        <TableHead>原料 / 半成品</TableHead>
                         <TableHead className="text-right">用量</TableHead>
-                        <TableHead className="text-right">损耗率</TableHead>
+                        <TableHead className="text-right">損耗率</TableHead>
                         <TableHead className="text-right">操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {selectedRecipe.items.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell className="font-medium">{getMaterialName(item.ref_id)}</TableCell>
+                          <TableCell className="font-medium">
+                            {item.item_type === "sub_recipe" && <Badge variant="outline" className="mr-1 text-xs">半成品</Badge>}
+                            {getRefName(item.item_type, item.ref_id)}
+                          </TableCell>
                           <TableCell className="text-right">{item.qty} {getUnitName(item.unit_id)}</TableCell>
                           <TableCell className="text-right">{(item.wastage_rate * 100).toFixed(1)}%</TableCell>
                           <TableCell className="text-right">
@@ -324,29 +335,41 @@ export function RecipesPage({
       <Dialog open={!!addItemRecipeId} onOpenChange={() => setAddItemRecipeId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>添加配方材料</DialogTitle>
+            <DialogTitle>添加配方明細</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>材料</Label>
+              <Label>類型</Label>
+              <div className="flex gap-2">
+                <Button size="sm" variant={addItemType === "material" ? "default" : "outline"} onClick={() => { setAddItemType("material"); setAddItemMaterial(""); }}>原材料</Button>
+                <Button size="sm" variant={addItemType === "sub_recipe" ? "default" : "outline"} onClick={() => { setAddItemType("sub_recipe"); setAddItemMaterial(""); }}>半成品（子配方）</Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{addItemType === "sub_recipe" ? "子配方" : "材料"}</Label>
               <Select value={addItemMaterial} onValueChange={setAddItemMaterial}>
-                <SelectTrigger><SelectValue placeholder="选择材料" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={addItemType === "sub_recipe" ? "選擇子配方" : "選擇材料"} /></SelectTrigger>
                 <SelectContent>
-                  {materials.map((m) => (
-                    <SelectItem key={m.id} value={m.id.toString()}>{m.name} ({m.code})</SelectItem>
-                  ))}
+                  {addItemType === "sub_recipe"
+                    ? recipes.filter((r) => r.id !== addItemRecipeId).map((r) => (
+                        <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.code})</SelectItem>
+                      ))
+                    : materials.map((m) => (
+                        <SelectItem key={m.id} value={m.id.toString()}>{m.name} ({m.code})</SelectItem>
+                      ))
+                  }
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>用量</Label>
-                <Input type="number" value={addItemQty} onChange={(e) => setAddItemQty(e.target.value)} placeholder="0.0" />
+                <Input type="number" value={addItemQty} onChange={(e) => setAddItemQty(e.target.value)} placeholder="0.0" min="0.001" step="0.001" />
               </div>
               <div className="space-y-2">
-                <Label>单位</Label>
+                <Label>單位</Label>
                 <Select value={addItemUnit} onValueChange={setAddItemUnit}>
-                  <SelectTrigger><SelectValue placeholder="选择单位" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="選擇單位" /></SelectTrigger>
                   <SelectContent>
                     {units.map((u) => (
                       <SelectItem key={u.id} value={u.id.toString()}>{u.name} ({u.code})</SelectItem>
@@ -356,8 +379,8 @@ export function RecipesPage({
               </div>
             </div>
             <div className="space-y-2">
-              <Label>损耗率 (%)</Label>
-              <Input type="number" value={addItemWastage} onChange={(e) => setAddItemWastage(e.target.value)} placeholder="0" />
+              <Label>損耗率 (%)</Label>
+              <Input type="number" value={addItemWastage} onChange={(e) => setAddItemWastage(e.target.value)} placeholder="0" min="0" max="100" />
             </div>
           </div>
           <DialogFooter>

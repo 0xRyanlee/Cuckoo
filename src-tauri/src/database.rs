@@ -40,6 +40,7 @@ pub struct Material {
     pub category_id: Option<i64>,
     pub base_unit_id: i64,
     pub shelf_life_days: Option<i32>,
+    pub min_qty: f64,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -245,6 +246,7 @@ pub struct Order {
     pub updated_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Customer {
     pub id: i64,
@@ -262,6 +264,7 @@ pub struct Customer {
     pub updated_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Coupon {
     pub id: i64,
@@ -613,6 +616,7 @@ impl Database {
                 category_id INTEGER,
                 base_unit_id INTEGER NOT NULL,
                 shelf_life_days INTEGER,
+                min_qty REAL NOT NULL DEFAULT 10.0,
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1089,6 +1093,8 @@ impl Database {
             CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_categories_name ON menu_categories(name);
             "
         )?;
+        // Migrations for existing databases
+        let _ = conn.execute("ALTER TABLE materials ADD COLUMN min_qty REAL NOT NULL DEFAULT 10.0", []);
         Ok(())
     }
 
@@ -1168,6 +1174,12 @@ impl Database {
         Ok(())
     }
 
+    pub fn health_check(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("SELECT 1", [], |_| Ok(()))?;
+        Ok(())
+    }
+
     pub fn get_units(&self) -> Result<Vec<Unit>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, code, name, unit_type, ratio_to_base FROM units ORDER BY id")?;
@@ -1233,19 +1245,19 @@ impl Database {
 
     pub fn get_materials(&self, category_id: Option<i64>) -> Result<Vec<MaterialWithTags>> {
         let conn = self.conn.lock().unwrap();
-        let query = if let Some(cat_id) = category_id {
-            "SELECT m.id, m.code, m.name, m.category_id, m.base_unit_id, m.shelf_life_days, m.is_active, m.created_at, m.updated_at FROM materials m WHERE m.is_active = 1 AND m.category_id = ?1 ORDER BY m.id"
+        let query = if let Some(_cat_id) = category_id {
+            "SELECT m.id, m.code, m.name, m.category_id, m.base_unit_id, m.shelf_life_days, m.min_qty, m.is_active, m.created_at, m.updated_at FROM materials m WHERE m.is_active = 1 AND m.category_id = ?1 ORDER BY m.id"
         } else {
-            "SELECT m.id, m.code, m.name, m.category_id, m.base_unit_id, m.shelf_life_days, m.is_active, m.created_at, m.updated_at FROM materials m WHERE m.is_active = 1 ORDER BY m.id"
+            "SELECT m.id, m.code, m.name, m.category_id, m.base_unit_id, m.shelf_life_days, m.min_qty, m.is_active, m.created_at, m.updated_at FROM materials m WHERE m.is_active = 1 ORDER BY m.id"
         };
         let mut stmt = conn.prepare(query)?;
         let materials: Vec<Material> = if let Some(cat_id) = category_id {
             stmt.query_map(params![cat_id], |row| {
-                Ok(Material { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, category_id: row.get(3)?, base_unit_id: row.get(4)?, shelf_life_days: row.get(5)?, is_active: row.get::<_, i32>(6)? != 0, created_at: row.get(7)?, updated_at: row.get(8)? })
+                Ok(Material { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, category_id: row.get(3)?, base_unit_id: row.get(4)?, shelf_life_days: row.get(5)?, min_qty: row.get(6)?, is_active: row.get::<_, i32>(7)? != 0, created_at: row.get(8)?, updated_at: row.get(9)? })
             })?.collect::<Result<Vec<_>>>()?
         } else {
             stmt.query_map([], |row| {
-                Ok(Material { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, category_id: row.get(3)?, base_unit_id: row.get(4)?, shelf_life_days: row.get(5)?, is_active: row.get::<_, i32>(6)? != 0, created_at: row.get(7)?, updated_at: row.get(8)? })
+                Ok(Material { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, category_id: row.get(3)?, base_unit_id: row.get(4)?, shelf_life_days: row.get(5)?, min_qty: row.get(6)?, is_active: row.get::<_, i32>(7)? != 0, created_at: row.get(8)?, updated_at: row.get(9)? })
             })?.collect::<Result<Vec<_>>>()?
         };
         let mut result = Vec::new();
@@ -1278,11 +1290,12 @@ impl Database {
         Ok(conn.last_insert_rowid())
     }
 
-    pub fn update_material(&self, id: i64, name: Option<&str>, category_id: Option<i64>, shelf_life_days: Option<i32>) -> Result<()> {
+    pub fn update_material(&self, id: i64, name: Option<&str>, category_id: Option<i64>, shelf_life_days: Option<i32>, min_qty: Option<f64>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         if let Some(n) = name { conn.execute("UPDATE materials SET name = ?1 WHERE id = ?2", params![n, id])?; }
         if let Some(c) = category_id { conn.execute("UPDATE materials SET category_id = ?1 WHERE id = ?2", params![c, id])?; }
         if let Some(s) = shelf_life_days { conn.execute("UPDATE materials SET shelf_life_days = ?1 WHERE id = ?2", params![s, id])?; }
+        if let Some(q) = min_qty { conn.execute("UPDATE materials SET min_qty = ?1 WHERE id = ?2", params![q, id])?; }
         Ok(())
     }
 
@@ -1386,9 +1399,9 @@ impl Database {
     pub fn get_attribute_templates(&self, entity_type: Option<&str>, category: Option<&str>) -> Result<Vec<AttributeTemplate>> {
         let conn = self.conn.lock().unwrap();
         let query = match (entity_type, category) {
-            (Some(et), Some(cat)) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates WHERE entity_type = ?1 AND category = ?2 ORDER BY id",
-            (Some(et), None) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates WHERE entity_type = ?1 ORDER BY id",
-            (None, Some(cat)) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates WHERE category = ?1 ORDER BY id",
+            (Some(_et), Some(_cat)) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates WHERE entity_type = ?1 AND category = ?2 ORDER BY id",
+            (Some(_et), None) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates WHERE entity_type = ?1 ORDER BY id",
+            (None, Some(_cat)) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates WHERE category = ?1 ORDER BY id",
             (None, None) => "SELECT id, entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active FROM attribute_templates ORDER BY id",
         };
         let mut stmt = conn.prepare(query)?;
@@ -1429,7 +1442,7 @@ impl Database {
 
     pub fn get_recipes(&self, recipe_type: Option<&str>) -> Result<Vec<Recipe>> {
         let conn = self.conn.lock().unwrap();
-        let query = if let Some(rt) = recipe_type {
+        let query = if let Some(_rt) = recipe_type {
             "SELECT id, code, name, recipe_type, output_material_id, output_state_id, output_qty, output_unit_id, cost, is_active, created_at, updated_at FROM recipes WHERE is_active = 1 AND recipe_type = ?1 ORDER BY name"
         } else {
             "SELECT id, code, name, recipe_type, output_material_id, output_state_id, output_qty, output_unit_id, cost, is_active, created_at, updated_at FROM recipes WHERE is_active = 1 ORDER BY name"
@@ -1479,17 +1492,38 @@ impl Database {
         Ok(conn.last_insert_rowid())
     }
 
-    pub fn calculate_recipe_cost(&self, recipe_id: i64) -> Result<f64> {
+    pub fn calculate_recipe_cost(&self, recipe_id: i64) -> Result<RecipeCostResult> {
         let conn = self.conn.lock().unwrap();
-        let cost: f64 = conn.query_row(
-            "SELECT COALESCE(SUM(ri.qty * ib.cost_per_unit * (1 + ri.wastage_rate / 100.0)), 0)
-             FROM recipe_items ri
-             LEFT JOIN inventory_batches ib ON ib.material_id = ri.ref_id AND ib.quantity > 0
-             WHERE ri.recipe_id = ?1 AND ri.item_type = 'material'",
+        let (recipe_name, output_qty): (String, f64) = conn.query_row(
+            "SELECT name, output_qty FROM recipes WHERE id = ?1",
             params![recipe_id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-        Ok(cost)
+        let mut stmt = conn.prepare(
+            "SELECT m.name,
+                    ri.qty,
+                    COALESCE(u.code, ''),
+                    COALESCE((SELECT AVG(ib2.cost_per_unit) FROM inventory_batches ib2
+                               WHERE ib2.material_id = ri.ref_id AND ib2.quantity > 0), 0.0),
+                    ri.wastage_rate
+             FROM recipe_items ri
+             JOIN materials m ON m.id = ri.ref_id
+             LEFT JOIN units u ON u.id = ri.unit_id
+             WHERE ri.recipe_id = ?1 AND ri.item_type = 'material'
+             ORDER BY ri.sort_no",
+        )?;
+        let items: Vec<RecipeCostItem> = stmt.query_map(params![recipe_id], |row| {
+            let material_name: String = row.get(0)?;
+            let qty: f64 = row.get(1)?;
+            let unit: String = row.get(2)?;
+            let cost_per_unit: f64 = row.get(3)?;
+            let wastage_rate: f64 = row.get(4)?;
+            let line_cost = qty * cost_per_unit * (1.0 + wastage_rate / 100.0);
+            Ok(RecipeCostItem { material_name, qty, unit, cost_per_unit, wastage_rate, line_cost })
+        })?.collect::<Result<Vec<_>>>()?;
+        let total_cost: f64 = items.iter().map(|i| i.line_cost).sum();
+        let cost_per_unit = if output_qty > 0.0 { total_cost / output_qty } else { 0.0 };
+        Ok(RecipeCostResult { recipe_id, recipe_name, total_cost, cost_per_unit, output_qty, items })
     }
 
     pub fn get_menu_categories(&self) -> Result<Vec<MenuCategory>> {
@@ -1510,7 +1544,7 @@ impl Database {
 
     pub fn get_menu_items(&self, category_id: Option<i64>) -> Result<Vec<MenuItem>> {
         let conn = self.conn.lock().unwrap();
-        let query = if let Some(cat_id) = category_id {
+        let query = if let Some(_cat_id) = category_id {
             "SELECT id, name, code, category_id, recipe_id, sales_price, cost, is_available, created_at FROM menu_items WHERE category_id = ?1 ORDER BY name"
         } else {
             "SELECT id, name, code, category_id, recipe_id, sales_price, cost, is_available, created_at FROM menu_items ORDER BY name"
@@ -1573,7 +1607,7 @@ impl Database {
 
     pub fn get_menu_items_for_pos(&self, category_id: Option<i64>) -> Result<Vec<MenuItem>> {
         let conn = self.conn.lock().unwrap();
-        let query = if let Some(cat_id) = category_id {
+        let query = if let Some(_cat_id) = category_id {
             "SELECT id, name, code, category_id, recipe_id, sales_price, cost, is_available, created_at FROM menu_items WHERE is_available = 1 AND category_id = ?1 ORDER BY name"
         } else {
             "SELECT id, name, code, category_id, recipe_id, sales_price, cost, is_available, created_at FROM menu_items WHERE is_available = 1 ORDER BY name"
@@ -1591,20 +1625,24 @@ impl Database {
         Ok(items)
     }
 
-    pub fn create_order(&self, source: &str, dine_type: &str, table_no: Option<&str>) -> Result<String> {
+    pub fn create_order(&self, source: &str, dine_type: &str, table_no: Option<&str>) -> Result<(i64, String)> {
         let conn = self.conn.lock().unwrap();
-        let order_no = format!("ORD{}", chrono::Utc::now().timestamp());
+        let order_no = format!("ORD{}", chrono::Utc::now().format("%Y%m%d%H%M%S%3f"));
         conn.execute(
             "INSERT INTO orders (order_no, source, dine_type, table_no, status) VALUES (?1, ?2, ?3, ?4, 'pending')",
             params![order_no, source, dine_type, table_no],
         )?;
-        Ok(order_no)
+        let id = conn.last_insert_rowid();
+        Ok((id, order_no))
     }
 
-    pub fn get_orders(&self) -> Result<Vec<Order>> {
+    pub fn get_orders(&self, limit: i64, offset: i64) -> Result<Vec<Order>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, order_no, source, dine_type, table_no, status, amount_total, note, created_at, updated_at FROM orders ORDER BY created_at DESC LIMIT 100")?;
-        let orders = stmt.query_map([], |row| {
+        let mut stmt = conn.prepare(
+            "SELECT id, order_no, source, dine_type, table_no, status, amount_total, note, created_at, updated_at
+             FROM orders ORDER BY created_at DESC LIMIT ?1 OFFSET ?2"
+        )?;
+        let orders = stmt.query_map(params![limit, offset], |row| {
             Ok(Order { id: row.get(0)?, order_no: row.get(1)?, source: row.get(2)?, dine_type: row.get(3)?, table_no: row.get(4)?, status: row.get(5)?, amount_total: row.get(6)?, note: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)? })
         })?.collect::<Result<Vec<_>>>()?;
         Ok(orders)
@@ -1621,7 +1659,7 @@ impl Database {
 
     pub fn get_station_tickets(&self, station_id: i64, status: Option<&str>) -> Result<Vec<KitchenTicket>> {
         let conn = self.conn.lock().unwrap();
-        let query = if let Some(s) = status {
+        let query = if let Some(_s) = status {
             "SELECT id, order_id, station_id, status, priority, printed_at, started_at, finished_at, created_at FROM kitchen_tickets WHERE station_id = ?1 AND status = ?2 ORDER BY priority DESC, created_at"
         } else {
             "SELECT id, order_id, station_id, status, priority, printed_at, started_at, finished_at, created_at FROM kitchen_tickets WHERE station_id = ?1 ORDER BY priority DESC, created_at"
@@ -1641,7 +1679,7 @@ impl Database {
 
     pub fn get_inventory_batches(&self, material_id: Option<i64>) -> Result<Vec<InventoryBatch>> {
         let conn = self.conn.lock().unwrap();
-        let query = if let Some(mid) = material_id {
+        let query = if let Some(_mid) = material_id {
             "SELECT id, material_id, state_id, lot_no, supplier_id, brand, spec, quantity, original_qty, cost_per_unit, production_date, expiry_date, ice_coating_rate, quality_rate, seasonal_factor, created_at, updated_at FROM inventory_batches WHERE material_id = ?1 AND quantity > 0 ORDER BY expiry_date"
         } else {
             "SELECT id, material_id, state_id, lot_no, supplier_id, brand, spec, quantity, original_qty, cost_per_unit, production_date, expiry_date, ice_coating_rate, quality_rate, seasonal_factor, created_at, updated_at FROM inventory_batches WHERE quantity > 0 ORDER BY material_id, expiry_date"
@@ -1660,30 +1698,50 @@ impl Database {
     }
 
     pub fn submit_order_full(&self, order_id: i64) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("UPDATE orders SET status = 'submitted', updated_at = datetime('now') WHERE id = ?1", params![order_id])?;
+        {
+            let conn = self.conn.lock().unwrap();
+            conn.execute("UPDATE orders SET status = 'submitted', updated_at = datetime('now') WHERE id = ?1", params![order_id])?;
+        } // lock released before calling create_kitchen_tickets (which also locks)
+        self.create_kitchen_tickets(order_id)?;
         Ok(Vec::new())
     }
 
     pub fn get_inventory_summary(&self) -> Result<Vec<InventorySummary>> {
         let conn = self.conn.lock().unwrap();
+        // reserved_qty = net outstanding reserves (reserve txns are negative, release txns positive)
         let mut stmt = conn.prepare(
-            "SELECT ib.material_id, m.name, SUM(ib.quantity) as total_qty, COALESCE(SUM(ib.quantity * ib.cost_per_unit), 0) as total_cost
+            "SELECT
+                ib.material_id,
+                m.name,
+                SUM(ib.quantity) as total_qty,
+                COALESCE((
+                    SELECT SUM(ri.qty * (1.0 + COALESCE(ri.wastage_rate, 0.0)) * oi.qty)
+                    FROM order_items oi
+                    JOIN orders o ON oi.order_id = o.id
+                    JOIN menu_items mi ON oi.menu_item_id = mi.id
+                    JOIN recipe_items ri ON ri.recipe_id = mi.recipe_id
+                        AND ri.item_type = 'material'
+                        AND ri.ref_id = ib.material_id
+                    WHERE o.status IN ('submitted', 'in_progress')
+                ), 0.0) as reserved_qty
              FROM inventory_batches ib
              JOIN materials m ON ib.material_id = m.id
              WHERE ib.quantity > 0
-             GROUP BY ib.material_id"
+             GROUP BY ib.material_id
+             ORDER BY m.name"
         )?;
         let summary = stmt.query_map([], |row| {
             let material_id: i64 = row.get(0)?;
             let material_name: String = row.get(1)?;
             let total_qty: f64 = row.get(2)?;
+            let reserved_qty: f64 = (row.get::<_, f64>(3)?).max(0.0);
+            let available_qty = (total_qty - reserved_qty).max(0.0);
             Ok(InventorySummary {
                 material_id,
                 material_name,
                 total_qty,
-                reserved_qty: 0.0,
-                available_qty: total_qty,
+                reserved_qty,
+                available_qty,
                 batches: Vec::new(),
             })
         })?.collect::<Result<Vec<_>>>()?;
@@ -1715,24 +1773,43 @@ impl Database {
         Ok(())
     }
 
-    pub fn adjust_inventory(&self, batch_id: i64, new_qty: f64, operator: Option<&str>, note: Option<&str>) -> Result<()> {
+    pub fn adjust_inventory(&self, batch_id: i64, qty_delta: f64, operator: Option<&str>, note: Option<&str>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let old_qty: f64 = conn.query_row("SELECT quantity FROM inventory_batches WHERE id = ?1", params![batch_id], |row| row.get(0))?;
-        let delta = new_qty - old_qty;
-        let material_id: i64 = conn.query_row("SELECT material_id FROM inventory_batches WHERE id = ?1", params![batch_id], |row| row.get(0))?;
-        let txn_no = format!("TXN{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
-        conn.execute(
-            "INSERT INTO inventory_txns (txn_no, txn_type, lot_id, material_id, qty_delta, operator, note) VALUES (?1, 'adjust', ?2, ?3, ?4, ?5, ?6)",
-            params![txn_no, batch_id, material_id, delta, operator, note],
+        let (current_qty, material_id): (f64, i64) = conn.query_row(
+            "SELECT quantity, material_id FROM inventory_batches WHERE id = ?1",
+            params![batch_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-        conn.execute("UPDATE inventory_batches SET quantity = ?1 WHERE id = ?2", params![new_qty, batch_id])?;
+        if current_qty + qty_delta < 0.0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                format!("調整後庫存 ({:.2}) 不能為負", current_qty + qty_delta),
+            ));
+        }
+        let txn_no = format!("TXN{}", chrono::Local::now().format("%Y%m%d%H%M%S%3f"));
+        conn.execute(
+            "INSERT INTO inventory_txns (txn_no, txn_type, lot_id, material_id, qty_delta, operator, note) VALUES (?1, 'adjustment', ?2, ?3, ?4, ?5, ?6)",
+            params![txn_no, batch_id, material_id, qty_delta, operator, note],
+        )?;
+        conn.execute(
+            "UPDATE inventory_batches SET quantity = quantity + ?1 WHERE id = ?2",
+            params![qty_delta, batch_id],
+        )?;
         Ok(())
     }
 
     pub fn record_wastage(&self, batch_id: i64, qty: f64, reason: Option<&str>, operator: Option<&str>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let material_id: i64 = conn.query_row("SELECT material_id FROM inventory_batches WHERE id = ?1", params![batch_id], |row| row.get(0))?;
-        let txn_no = format!("TXN{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
+        let (current_qty, material_id): (f64, i64) = conn.query_row(
+            "SELECT quantity, material_id FROM inventory_batches WHERE id = ?1",
+            params![batch_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if qty > current_qty {
+            return Err(rusqlite::Error::InvalidParameterName(
+                format!("廢棄數量 ({:.2}) 超過現有庫存 ({:.2})", qty, current_qty),
+            ));
+        }
+        let txn_no = format!("TXN{}", chrono::Local::now().format("%Y%m%d%H%M%S%3f"));
         conn.execute(
             "INSERT INTO inventory_txns (txn_no, txn_type, lot_id, material_id, qty_delta, operator, note) VALUES (?1, 'wastage', ?2, ?3, ?4, ?5, ?6)",
             params![txn_no, batch_id, material_id, -qty, operator, reason],
@@ -1755,6 +1832,18 @@ impl Database {
         let current: bool = conn.query_row("SELECT is_available FROM menu_items WHERE id = ?1", params![id], |row| row.get::<_, i32>(0).map(|v| v != 0))?;
         conn.execute("UPDATE menu_items SET is_available = ?1 WHERE id = ?2", params![if current { 0 } else { 1 }, id])?;
         Ok(!current)
+    }
+
+    pub fn batch_toggle_menu_item_availability(&self, ids: &[i64], is_available: bool) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let mut count = 0;
+        for id in ids {
+            let result = conn.execute("UPDATE menu_items SET is_available = ?1 WHERE id = ?2", params![if is_available { 1 } else { 0 }, id]);
+            if result.is_ok() {
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 
     pub fn delete_menu_item(&self, id: i64) -> Result<()> {
@@ -1853,6 +1942,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn select_batches_for_reservation_internal(&self, conn: &Connection, material_id: i64, required_qty: f64) -> Result<Vec<(i64, f64)>> {
         let mut stmt = conn.prepare(
             "SELECT ib.id, ib.quantity - COALESCE(
@@ -1888,6 +1978,7 @@ impl Database {
     }
 
     /// 實扣庫存：將預扣轉為實扣（KDS 完成出餐時調用）
+    #[allow(dead_code)]
     pub fn confirm_inventory_for_order(&self, order_id: i64) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         
@@ -1958,6 +2049,22 @@ impl Database {
         )?;
         
         Ok(txn_nos)
+    }
+
+    /// 批量取消訂單
+    pub fn batch_cancel_orders(&self, ids: &[i64]) -> Result<usize> {
+        let mut failed: Vec<String> = Vec::new();
+        for &id in ids {
+            if let Err(e) = self.release_inventory_for_order(id) {
+                failed.push(format!("訂單 {}: {}", id, e));
+            }
+        }
+        if !failed.is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                format!("部分訂單取消失敗（{}）：{}", failed.len(), failed.join("；")),
+            ));
+        }
+        Ok(ids.len())
     }
 
     /// 創建廚房小票（訂單提交時自動拆單）
@@ -2341,6 +2448,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn bind_printer_to_station(&self, printer_id: i64, station_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -2350,6 +2458,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn unbind_printer_from_station(&self, printer_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -2359,6 +2468,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_printers_for_station(&self, station_id: i64) -> Result<Vec<PrinterConfig>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -2436,6 +2546,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_failed_print_tasks(&self) -> Result<Vec<PrintTask>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -2459,6 +2570,7 @@ impl Database {
         Ok(tasks)
     }
 
+    #[allow(dead_code)]
     pub fn retry_print_task(&self, id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -2468,6 +2580,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn retry_all_failed_print_tasks(&self) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let count = conn.execute(
@@ -2550,7 +2663,7 @@ impl Database {
 
     pub fn update_purchase_order_status(&self, po_id: i64, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("UPDATE purchase_orders SET status = ?1 WHERE id = ?1", params![status, po_id])?;
+        conn.execute("UPDATE purchase_orders SET status = ?1 WHERE id = ?2", params![status, po_id])?;
         Ok(())
     }
 
@@ -2928,9 +3041,18 @@ Ok(())
 
     // ==================== 模板引擎 ====================
 
-    pub fn render_template_preview(&self, template_id: i64, data: &serde_json::Value) -> Result<PrintPreviewResult> {
-        let tpl = self.get_print_template(template_id)?;
-        let template: serde_json::Value = serde_json::from_str(&tpl.content).map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?;
+    pub fn render_template_content_preview(
+        &self,
+        content: &str,
+        paper_size: &str,
+        _theme: &str,
+        restaurant_name: &str,
+        tagline: &str,
+        logo_data: Option<&str>,
+        data: &serde_json::Value,
+    ) -> Result<PrintPreviewResult> {
+        let template: serde_json::Value = serde_json::from_str(content)
+            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?;
 
         let mut lines: Vec<String> = Vec::new();
         if let Some(elements) = template.get("elements").and_then(|e| e.as_array()) {
@@ -2938,12 +3060,12 @@ Ok(())
                 if let Some(kind) = elem.get("type").and_then(|t| t.as_str()) {
                     match kind {
                         "text" => {
-                            let content = elem.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                            let rendered = self.interpolate_template_string(content, data);
+                            let content_str = elem.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                            let rendered = self.interpolate_template_string(content_str, data);
                             let align = elem.get("align").and_then(|a| a.as_str()).unwrap_or("left");
                             let bold = elem.get("bold").and_then(|b| b.as_bool()).unwrap_or(false);
                             let size = elem.get("size").and_then(|s| s.as_str()).unwrap_or("normal");
-                            let width = if tpl.paper_size == "58mm" { 32 } else { 48 };
+                            let width = if paper_size == "58mm" { 32 } else { 48 };
                             let mut line = rendered;
                             if align == "center" {
                                 let pad = if width > line.chars().count() { (width - line.chars().count()) / 2 } else { 0 };
@@ -2958,7 +3080,7 @@ Ok(())
                             lines.push(format!("{}{}{}{}", size_prefix, prefix, line, suffix));
                         }
                         "separator" => {
-                            let width = if tpl.paper_size == "58mm" { 32 } else { 48 };
+                            let width = if paper_size == "58mm" { 32 } else { 48 };
                             lines.push("─".repeat(width));
                         }
                         "blank_lines" => {
@@ -2971,7 +3093,6 @@ Ok(())
                                     let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
                                     let qty = item.get("qty").and_then(|q| q.as_f64()).unwrap_or(1.0);
                                     let note = item.get("note").and_then(|n| n.as_str());
-                                    let _width = if tpl.paper_size == "58mm" { 32 } else { 48 };
                                     let item_line = format!("{} x{}", name, qty as i64);
                                     lines.push(item_line);
                                     if let Some(n) = note {
@@ -2987,26 +3108,74 @@ Ok(())
             }
         }
 
-        let mut html_lines: Vec<String> = Vec::new();
+        let mut html = String::new();
+        html.push_str("<div class=\"receipt-preview\" style=\"");
+        html.push_str("font-family: 'Courier New', monospace; ");
+        html.push_str("background: #fff; ");
+        html.push_str("color: #1a1a1a; ");
+        html.push_str("padding: 16px; ");
+        html.push_str(&format!("max-width: {}px; ", if paper_size == "58mm" { 240 } else { 320 }));
+        html.push_str("margin: 0 auto; ");
+        html.push_str("border: 1px solid #e2e8f0; ");
+        html.push_str("border-radius: 8px; ");
+        html.push_str("\">\n");
+
+        if !restaurant_name.is_empty() || logo_data.is_some() {
+            html.push_str("<div style=\"text-align: center; margin-bottom: 12px;\">");
+            if let Some(logo) = logo_data {
+                if !logo.is_empty() {
+                    html.push_str(&format!("<img src=\"{}\" style=\"max-height: 48px; max-width: 80px; margin-bottom: 6px;\" />", logo));
+                }
+            }
+            if !restaurant_name.is_empty() {
+                html.push_str(&format!("<div style=\"font-size: 18px; font-weight: bold;\">{}</div>", restaurant_name));
+            }
+            if !tagline.is_empty() {
+                html.push_str(&format!("<div style=\"font-size: 11px; color: #666;\">{}</div>", tagline));
+            }
+            html.push_str("</div>");
+            html.push_str("<div style=\"border-bottom: 1px dashed #ccc; margin: 8px 0;\"></div>");
+        }
+
         for line in &lines {
             if line.is_empty() {
-                html_lines.push("<br/>".to_string());
+                html.push_str("<div style=\"height: 8px;\"></div>\n");
             } else if line.starts_with("##") {
                 let content = line.trim_start_matches("##").trim_matches('*');
-                html_lines.push(format!("<div class=\"text-lg font-bold\">{}</div>", content));
+                html.push_str(&format!("<div style=\"font-size: 16px; font-weight: bold; text-align: center;\">{}</div>\n", content));
             } else if line.starts_with("**") {
                 let content = line.trim_matches('*');
-                html_lines.push(format!("<div class=\"font-bold\">{}</div>", content));
+                html.push_str(&format!("<div style=\"font-weight: bold;\">{}</div>\n", content));
             } else {
-                html_lines.push(format!("<div>{}</div>", line));
+                let escaped = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+                if line.chars().all(|c| c == '─') {
+                    html.push_str("<div style=\"border-bottom: 1px dashed #ccc; margin: 6px 0;\"></div>\n");
+                } else {
+                    html.push_str(&format!("<div style=\"font-size: 13px; line-height: 1.4;\">{}</div>\n", escaped));
+                }
             }
         }
 
+        html.push_str("</div>");
+
         Ok(PrintPreviewResult {
-            html: format!("<div class=\"font-mono text-sm p-4 bg-white text-black max-w-{}\">{}</div>", if tpl.paper_size == "58mm" { "58" } else { "80" }, html_lines.join("\n")),
+            html,
             lines,
-            paper_width: tpl.paper_size,
+            paper_width: paper_size.to_string(),
         })
+    }
+
+    pub fn render_template_preview(&self, template_id: i64, data: &serde_json::Value) -> Result<PrintPreviewResult> {
+        let tpl = self.get_print_template(template_id)?;
+        self.render_template_content_preview(
+            &tpl.content,
+            &tpl.paper_size,
+            tpl.theme.as_deref().unwrap_or("classic"),
+            tpl.restaurant_name.as_deref().unwrap_or(""),
+            tpl.tagline.as_deref().unwrap_or(""),
+            tpl.logo_data.as_deref(),
+            data,
+        )
     }
 
     fn interpolate_template_string(&self, template: &str, data: &serde_json::Value) -> String {
@@ -3027,6 +3196,7 @@ Ok(())
         result
     }
 
+    #[allow(dead_code)]
     pub fn render_kitchen_ticket_from_template(&self, template_id: i64, data: &serde_json::Value, paper_size: &str) -> Result<(String, Vec<u8>)> {
         use crate::printer::EscPosBuilder;
         
@@ -3159,6 +3329,7 @@ Ok(())
 
     // ==================== 通知系统 ====================
 
+    #[allow(dead_code)]
     pub fn create_notification(&self, notification_type: &str, title: &str, message: &str, severity: &str, ref_type: Option<&str>, ref_id: Option<i64>) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -3209,6 +3380,7 @@ Ok(())
 
     // ==================== 会员系统 ====================
 
+    #[allow(dead_code)]
     pub fn get_customers(&self) -> Result<Vec<Customer>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, name, phone, wechat_openid, membership_no, points, balance, birthday, gender, note, is_active, created_at, updated_at FROM customers WHERE is_active = 1 ORDER BY created_at DESC")?;
@@ -3232,6 +3404,7 @@ Ok(())
         Ok(customers)
     }
 
+    #[allow(dead_code)]
     pub fn create_customer(&self, name: Option<&str>, phone: Option<&str>, wechat_openid: Option<&str>) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         let membership_no = format!("M{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
@@ -3242,6 +3415,7 @@ Ok(())
         Ok(conn.last_insert_rowid())
     }
 
+    #[allow(dead_code)]
     pub fn update_customer_points(&self, customer_id: i64, points_delta: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -3251,6 +3425,7 @@ Ok(())
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn update_customer_balance(&self, customer_id: i64, balance_delta: f64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -3262,6 +3437,7 @@ Ok(())
 
     // ==================== 优惠券系统 ====================
 
+    #[allow(dead_code)]
     pub fn get_coupons(&self) -> Result<Vec<Coupon>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, name, code, discount_percent, discount_amount, min_amount, valid_from, valid_until, is_active, created_at, updated_at FROM coupons WHERE is_active = 1")?;
@@ -3283,6 +3459,7 @@ Ok(())
         Ok(coupons)
     }
 
+    #[allow(dead_code)]
     pub fn create_coupon(&self, name: &str, code: &str, discount_percent: Option<f64>, discount_amount: Option<f64>, min_amount: Option<f64>, valid_from: Option<&str>, valid_until: Option<&str>) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -3292,6 +3469,7 @@ Ok(())
         Ok(conn.last_insert_rowid())
     }
 
+    #[allow(dead_code)]
     pub fn use_coupon(&self, customer_id: i64, coupon_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -3303,6 +3481,7 @@ Ok(())
 
     // ==================== 门店系统 ====================
 
+    #[allow(dead_code)]
     pub fn get_stores(&self) -> Result<Vec<(i64, String, String)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id, name, address FROM stores WHERE is_active = 1")?;
@@ -3312,6 +3491,7 @@ Ok(())
         Ok(stores)
     }
 
+    #[allow(dead_code)]
     pub fn add_store_filter(&self, store_id: Option<i64>) -> String {
         if let Some(id) = store_id {
             format!(" AND store_id = {}", id)

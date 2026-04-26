@@ -310,7 +310,7 @@ pub fn add_recipe_item(state: State<AppState>, recipe_id: i64, req: RecipeItemRe
 }
 
 #[tauri::command]
-pub fn calculate_recipe_cost(state: State<AppState>, recipe_id: i64) -> Result<f64, String> {
+pub fn calculate_recipe_cost(state: State<AppState>, recipe_id: i64) -> Result<RecipeCostResult, String> {
     state.db.calculate_recipe_cost(recipe_id).map_err(|e| e.to_string())
 }
 
@@ -363,14 +363,21 @@ pub fn get_menu_items_for_pos(state: State<AppState>, category_id: Option<i64>) 
 
 // ==================== 訂單 API ====================
 
-#[tauri::command]
-pub fn create_order(state: State<AppState>, req: CreateOrderRequest) -> Result<String, String> {
-    state.db.create_order(&req.source, &req.dine_type, req.table_no.as_deref()).map_err(|e| e.to_string())
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateOrderResponse {
+    pub id: i64,
+    pub order_no: String,
 }
 
 #[tauri::command]
-pub fn get_orders(state: State<AppState>) -> Result<Vec<Order>, String> {
-    state.db.get_orders().map_err(|e| e.to_string())
+pub fn create_order(state: State<AppState>, req: CreateOrderRequest) -> Result<CreateOrderResponse, String> {
+    let (id, order_no) = state.db.create_order(&req.source, &req.dine_type, req.table_no.as_deref()).map_err(|e| e.to_string())?;
+    Ok(CreateOrderResponse { id, order_no })
+}
+
+#[tauri::command]
+pub fn get_orders(state: State<AppState>, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Order>, String> {
+    state.db.get_orders(limit.unwrap_or(200), offset.unwrap_or(0)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -398,6 +405,11 @@ pub fn submit_order(state: State<AppState>, order_id: i64) -> Result<Vec<String>
 #[tauri::command]
 pub fn cancel_order(state: State<AppState>, order_id: i64) -> Result<Vec<String>, String> {
     state.db.release_inventory_for_order(order_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn batch_cancel_orders(state: State<AppState>, ids: Vec<i64>) -> Result<usize, String> {
+    state.db.batch_cancel_orders(&ids).map_err(|e| e.to_string())
 }
 
 // ==================== KDS API ====================
@@ -553,8 +565,8 @@ pub fn record_wastage(state: State<AppState>, req: RecordWastageRequest) -> Resu
 }
 
 #[tauri::command]
-pub fn update_material(state: State<AppState>, id: i64, name: Option<String>, category_id: Option<i64>, shelf_life_days: Option<i32>) -> Result<(), String> {
-    state.db.update_material(id, name.as_deref(), category_id, shelf_life_days).map_err(|e| e.to_string())
+pub fn update_material(state: State<AppState>, id: i64, name: Option<String>, category_id: Option<i64>, shelf_life_days: Option<i32>, min_qty: Option<f64>) -> Result<(), String> {
+    state.db.update_material(id, name.as_deref(), category_id, shelf_life_days, min_qty).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -608,6 +620,11 @@ pub fn toggle_menu_item_availability(state: State<AppState>, id: i64) -> Result<
 }
 
 #[tauri::command]
+pub fn batch_toggle_menu_item_availability(state: State<AppState>, ids: Vec<i64>, is_available: bool) -> Result<usize, String> {
+    state.db.batch_toggle_menu_item_availability(&ids, is_available).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn delete_menu_item(state: State<AppState>, id: i64) -> Result<(), String> {
     state.db.delete_menu_item(id).map_err(|e| e.to_string())
 }
@@ -650,8 +667,11 @@ pub fn remove_station_menu_item(state: State<AppState>, station_id: i64, menu_it
 // ==================== 健康檢查 ====================
 
 #[tauri::command]
-pub fn health_check() -> String {
-    "ok".to_string()
+pub fn health_check(state: State<AppState>) -> String {
+    match state.db.health_check() {
+        Ok(_) => "ok".to_string(),
+        Err(e) => format!("error: {}", e),
+    }
 }
 
 // ==================== 打印機 API ====================
@@ -1107,6 +1127,7 @@ pub fn get_material_consumption_report(state: State<AppState>, start_date: Strin
     state.db.get_material_consumption_report(&start_date, &end_date).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn export_report_csv(state: State<AppState>, report_type: String, start_date: String, end_date: String) -> Result<String, String> {
     let csv = match report_type.as_str() {
@@ -1196,8 +1217,31 @@ pub fn render_template_preview(state: State<AppState>, template_id: i64, data: s
     state.db.render_template_preview(template_id, &data).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn render_template_content_preview(
+    state: State<AppState>,
+    content: String,
+    paper_size: String,
+    theme: String,
+    restaurant_name: String,
+    tagline: String,
+    logo_data: Option<String>,
+    data: serde_json::Value,
+) -> Result<PrintPreviewResult, String> {
+    state.db.render_template_content_preview(
+        &content,
+        &paper_size,
+        &theme,
+        &restaurant_name,
+        &tagline,
+        logo_data.as_deref(),
+        &data,
+    ).map_err(|e| e.to_string())
+}
+
 // ==================== 打印機命令 ====================
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn bind_feie_printer(state: State<AppState>, printer_id: i64, printer_key: String) -> Result<String, String> {
     let printer = state.db.get_printers().map_err(|e| e.to_string())?
@@ -1212,6 +1256,7 @@ pub fn bind_feie_printer(state: State<AppState>, printer_id: i64, printer_key: S
     printer::feie_add_printer(user, ukey, sn, &printer_key)
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn check_printer_status(state: State<AppState>, printer_id: i64) -> Result<String, String> {
     let printer = state.db.get_printers().map_err(|e| e.to_string())?
@@ -1267,21 +1312,25 @@ pub fn check_and_create_alerts(state: State<AppState>) -> Result<(), String> {
 
 // ==================== 会员系统命令 ====================
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn get_customers(state: State<AppState>) -> Result<Vec<Customer>, String> {
     state.db.get_customers().map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn create_customer(state: State<AppState>, name: Option<String>, phone: Option<String>, wechat_openid: Option<String>) -> Result<i64, String> {
     state.db.create_customer(name.as_deref(), phone.as_deref(), wechat_openid.as_deref()).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn update_customer_points(state: State<AppState>, customer_id: i64, points_delta: i64) -> Result<(), String> {
     state.db.update_customer_points(customer_id, points_delta).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn update_customer_balance(state: State<AppState>, customer_id: i64, balance_delta: f64) -> Result<(), String> {
     state.db.update_customer_balance(customer_id, balance_delta).map_err(|e| e.to_string())
@@ -1289,16 +1338,19 @@ pub fn update_customer_balance(state: State<AppState>, customer_id: i64, balance
 
 // ==================== 优惠券命令 ====================
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn get_coupons(state: State<AppState>) -> Result<Vec<Coupon>, String> {
     state.db.get_coupons().map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn create_coupon(state: State<AppState>, name: String, code: String, discount_percent: Option<f64>, discount_amount: Option<f64>, min_amount: Option<f64>, valid_from: Option<String>, valid_until: Option<String>) -> Result<i64, String> {
     state.db.create_coupon(&name, &code, discount_percent, discount_amount, min_amount, valid_from.as_deref(), valid_until.as_deref()).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn use_coupon(state: State<AppState>, customer_id: i64, coupon_id: i64) -> Result<(), String> {
     state.db.use_coupon(customer_id, coupon_id).map_err(|e| e.to_string())
@@ -1306,6 +1358,7 @@ pub fn use_coupon(state: State<AppState>, customer_id: i64, coupon_id: i64) -> R
 
 // ==================== 门店命令 ====================
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn get_stores(state: State<AppState>) -> Result<Vec<(i64, String, String)>, String> {
     state.db.get_stores().map_err(|e| e.to_string())

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -10,6 +11,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Minus, ShoppingCart, Send, X, MessageSquare, Tag, FileText } from "lucide-react";
+
+function formatPrice(price: number): string {
+  return price.toLocaleString("zh-CN", { style: "currency", currency: "CNY" });
+}
 
 interface MenuCategory {
   id: number;
@@ -44,8 +49,8 @@ interface CartItem {
 interface POSPageProps {
   menuCategories: MenuCategory[];
   menuItems: MenuItem[];
-  onCreateOrder: (items: CartItem[]) => Promise<boolean>;
-  onCreateAndSubmit: (items: CartItem[]) => Promise<boolean>;
+  onCreateOrder: (items: CartItem[], dineType: string, tableNo: string | null) => Promise<boolean>;
+  onCreateAndSubmit: (items: CartItem[], dineType: string, tableNo: string | null) => Promise<boolean>;
   onGetSpecs: (menuItemId: number) => Promise<MenuItemSpec[]>;
   searchQuery?: string;
   loading?: boolean;
@@ -69,6 +74,40 @@ export function POSPage({
   const [specs, setSpecs] = useState<MenuItemSpec[]>([]);
   const [selectedSpec, setSelectedSpec] = useState<MenuItemSpec | null>(null);
   const [tempNote, setTempNote] = useState("");
+  const [dineType, setDineType] = useState("dine_in");
+  const [tableNo, setTableNo] = useState("");
+
+  useEffect(() => {
+    if (menuItems.length === 0) return;
+    try {
+      const saved = localStorage.getItem("cuckoo_cart");
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.length > 0) {
+          const rehydrated = arr.map((item: CartItem) => {
+            const fresh = menuItems.find((m) => m.id === item.menu_item.id);
+            return fresh ? { ...item, menu_item: fresh } : item;
+          });
+          setCart(rehydrated);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [menuItems]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cuckoo_cart", JSON.stringify(cart));
+    } catch {
+      // ignore
+    }
+  }, [cart]);
+
+  const clearCart = () => {
+    setCart([]);
+    localStorage.removeItem("cuckoo_cart");
+  };
 
   const filteredItems = menuItems.filter((item) => {
     const matchesCategory = !selectedCategory || item.category_id === selectedCategory;
@@ -223,7 +262,7 @@ export function POSPage({
                           )}
                         </div>
                         <span className="text-lg font-bold text-primary">
-                          ¥{item.sales_price.toFixed(2)}
+                          {formatPrice(item.sales_price)}
                         </span>
                       </button>
                     ))}
@@ -308,7 +347,7 @@ export function POSPage({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">
-                        ¥{(getItemPrice(item) * item.qty).toFixed(2)}
+                        {formatPrice(getItemPrice(item) * item.qty)}
                       </span>
                       <Button
                         variant="ghost"
@@ -329,13 +368,38 @@ export function POSPage({
         <div className="p-4 space-y-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">合计</span>
-            <span className="text-2xl font-bold text-primary">¥{cartTotal.toFixed(2)}</span>
+            <span className="text-2xl font-bold text-primary">{formatPrice(cartTotal)}</span>
           </div>
+          <div className="flex gap-2">
+            <Button
+              variant={dineType === "dine_in" ? "default" : "outline"}
+              size="sm" className="flex-1"
+              onClick={() => setDineType("dine_in")}
+            >堂食</Button>
+            <Button
+              variant={dineType === "takeout" ? "default" : "outline"}
+              size="sm" className="flex-1"
+              onClick={() => setDineType("takeout")}
+            >外带</Button>
+            <Button
+              variant={dineType === "delivery" ? "default" : "outline"}
+              size="sm" className="flex-1"
+              onClick={() => setDineType("delivery")}
+            >外送</Button>
+          </div>
+          {dineType === "dine_in" && (
+            <Input
+              placeholder="桌号（可选）"
+              value={tableNo}
+              onChange={(e) => setTableNo(e.target.value)}
+              className="h-9"
+            />
+          )}
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="h-12" onClick={async () => { const ok = await onCreateOrder(cart); if (ok) setCart([]); }} disabled={cart.length === 0}>
+            <Button variant="outline" className="h-12" onClick={async () => { const ok = await onCreateOrder(cart, dineType, tableNo || null); if (ok) clearCart(); }} disabled={cart.length === 0}>
               暂存
             </Button>
-            <Button className="h-12 text-base" size="lg" onClick={async () => { const ok = await onCreateAndSubmit(cart); if (ok) setCart([]); }} disabled={cart.length === 0}>
+            <Button className="h-12 text-base" size="lg" onClick={async () => { const ok = await onCreateAndSubmit(cart, dineType, tableNo || null); if (ok) clearCart(); }} disabled={cart.length === 0}>
               <Send className="mr-2 h-5 w-5" />
               提交
             </Button>
@@ -360,7 +424,7 @@ export function POSPage({
                 <div className="flex items-center gap-3">
                   {spec.price_delta !== 0 && (
                     <span className={`text-sm ${spec.price_delta > 0 ? "text-destructive" : "text-emerald-500"}`}>
-                      {spec.price_delta > 0 ? "+" : ""}¥{spec.price_delta.toFixed(2)}
+                      {spec.price_delta > 0 ? "+" : ""}{formatPrice(spec.price_delta)}
                     </span>
                   )}
                   {spec.qty_multiplier !== 1 && (
@@ -374,8 +438,8 @@ export function POSPage({
             <Button variant="outline" onClick={() => setSpecDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={confirmSpec} disabled={!selectedSpec}>
-              确认
+            <Button onClick={confirmSpec}>
+              确認
             </Button>
           </DialogFooter>
         </DialogContent>

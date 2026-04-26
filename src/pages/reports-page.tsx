@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, TrendingUp, Trophy, Calendar } from "lucide-react";
+import { BarChart3, TrendingUp, Trophy, PieChart as PieChartIcon, Package, Download } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
 
@@ -26,6 +26,27 @@ export function ReportsPage() {
   const [consumptionData, setConsumptionData] = useState<[string, number, number, number][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function downloadCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+    const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [headers.map(escape), ...rows.map((r) => r.map(escape))].map((r) => r.join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportAllCSV() {
+    const ds = `${startDate}_${endDate}`;
+    downloadCSV(`銷售報表_${ds}.csv`, ["日期", "銷售額", "訂單數"], salesData.map(([d, amt, cnt]) => [d, amt.toFixed(2), cnt]));
+    downloadCSV(`分類報表_${ds}.csv`, ["分類", "銷售額", "訂單數"], categoryData.map(([cat, amt, cnt]) => [cat, amt.toFixed(2), cnt]));
+    downloadCSV(`毛利報表_${ds}.csv`, ["日期", "收入", "成本", "毛利"], profitData.map(([d, rev, cost, profit]) => [d, rev.toFixed(2), cost.toFixed(2), profit.toFixed(2)]));
+    downloadCSV(`熱銷商品_${ds}.csv`, ["商品", "銷售額", "數量", "均價"], topItems.map(([name, amt, qty, avg]) => [name, amt.toFixed(2), qty, avg.toFixed(2)]));
+    downloadCSV(`原料消耗_${ds}.csv`, ["原料", "消耗量", "成本", "訂單數"], consumptionData.map(([name, qty, cost, cnt]) => [name, qty.toFixed(4), cost.toFixed(2), cnt]));
+  }
 
   async function loadReports() {
     if (!startDate || !endDate) return;
@@ -76,9 +97,9 @@ export function ReportsPage() {
         </div>
       )}
 
+      {/* Date Range Filter */}
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><Calendar className="h-4 w-4" />日期范围</CardTitle></CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="flex items-end gap-4">
             <div className="space-y-2">
               <Label>开始日期</Label>
@@ -88,18 +109,22 @@ export function ReportsPage() {
               <Label>结束日期</Label>
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
-            <Button onClick={loadReports} disabled={loading}>查询</Button>
+            <Button onClick={loadReports} disabled={loading}>查詢</Button>
+            <Button variant="outline" onClick={exportAllCSV} disabled={loading || salesData.length === 0}>
+              <Download className="mr-2 h-4 w-4" />導出 CSV
+            </Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">總銷售額</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">总销售额</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">¥{totalSales.toFixed(2)}</div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">總訂單數</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">总订单数</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{totalOrders}</div></CardContent>
         </Card>
         <Card>
@@ -112,24 +137,29 @@ export function ReportsPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="sales">
-        <TabsList>
-          <TabsTrigger value="sales" className="flex items-center gap-1"><BarChart3 className="h-4 w-4" />销售报表</TabsTrigger>
-          <TabsTrigger value="profit" className="flex items-center gap-1"><TrendingUp className="h-4 w-4" />毛利报表</TabsTrigger>
-          <TabsTrigger value="top" className="flex items-center gap-1"><Trophy className="h-4 w-4" />热销排行</TabsTrigger>
-          <TabsTrigger value="category">分类销售</TabsTrigger>
-          <TabsTrigger value="consumption" className="flex items-center gap-1">原料消耗</TabsTrigger>
+      {/* Report Tabs */}
+      <Tabs defaultValue="sales" className="w-full" orientation="horizontal">
+        <TabsList variant="line" className="w-full">
+          <TabsTrigger value="sales" className="gap-1.5"><BarChart3 className="h-4 w-4" />销售报表</TabsTrigger>
+          <TabsTrigger value="profit" className="gap-1.5"><TrendingUp className="h-4 w-4" />毛利报表</TabsTrigger>
+          <TabsTrigger value="top" className="gap-1.5"><Trophy className="h-4 w-4" />热销排行</TabsTrigger>
+          <TabsTrigger value="category" className="gap-1.5"><PieChartIcon className="h-4 w-4" />分类销售</TabsTrigger>
+          <TabsTrigger value="consumption" className="gap-1.5"><Package className="h-4 w-4" />原料消耗</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="sales" className="mt-4 space-y-4">
+        {/* Sales Report */}
+        <TabsContent value="sales" className="mt-6">
           <Card>
-            <CardHeader><CardTitle>每日销售额</CardTitle><CardDescription>按日期统计销售金额和订单数</CardDescription></CardHeader>
+            <CardHeader>
+              <CardTitle>每日销售额</CardTitle>
+              <CardDescription>按日期统计销售金额和订单数</CardDescription>
+            </CardHeader>
             <CardContent>
               {salesData.length === 0 ? (
                 <EmptyState icon={BarChart3} title="暂无数据" description="选择日期范围查询销售数据" />
               ) : (
                 <>
-                  <div className="h-[300px] mb-4">
+                  <div className="h-[300px] mb-6">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={salesData.map(([date, amount, count]) => ({ date, amount, count }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -140,7 +170,7 @@ export function ReportsPage() {
                           const label = name === "amount" ? "销售额" : name === "count" ? "订单数" : String(name ?? "");
                           return [display, label];
                         }} />
-                        <Bar dataKey="amount" fill="#3B82F6" radius={[4, 4, 0, 0]} name="销售额" animationDuration={600} animationBegin={200} />
+                        <Bar dataKey="amount" fill="#3B82F6" radius={[4, 4, 0, 0]} name="销售额" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -149,8 +179,8 @@ export function ReportsPage() {
                       <TableRow><TableHead>日期</TableHead><TableHead className="text-right">销售额</TableHead><TableHead className="text-right">订单数</TableHead></TableRow>
                     </TableHeader>
                     <TableBody>
-                      {salesData.map(([date, amount, count], i) => (
-                        <TableRow key={date} className="animate-stagger" style={{ animationDelay: `${i * 40}ms` }}>
+                      {salesData.map(([date, amount, count]) => (
+                        <TableRow key={date}>
                           <TableCell className="font-mono text-xs">{date}</TableCell>
                           <TableCell className="text-right font-medium">¥{amount.toFixed(2)}</TableCell>
                           <TableCell className="text-right">{count}</TableCell>
@@ -164,15 +194,19 @@ export function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="profit" className="mt-4 space-y-4">
+        {/* Profit Report */}
+        <TabsContent value="profit" className="mt-6">
           <Card>
-            <CardHeader><CardTitle>每日毛利</CardTitle><CardDescription>收入、成本、毛利對比</CardDescription></CardHeader>
+            <CardHeader>
+              <CardTitle>每日毛利</CardTitle>
+              <CardDescription>收入、成本、毛利对比</CardDescription>
+            </CardHeader>
             <CardContent>
               {profitData.length === 0 ? (
                 <EmptyState icon={TrendingUp} title="暂无数据" description="选择日期范围查询毛利数据" />
               ) : (
                 <>
-                  <div className="h-[300px] mb-4">
+                  <div className="h-[300px] mb-6">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={profitData.map(([date, revenue, cost, profit]) => ({ date, revenue, cost, profit }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -180,9 +214,9 @@ export function ReportsPage() {
                         <YAxis className="text-xs" tick={{ fontSize: 12 }} />
                         <Tooltip formatter={(value: unknown) => [`¥${typeof value === "number" ? value.toFixed(2) : value}`, ""]} />
                         <Legend />
-                        <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} name="收入" animationDuration={600} animationBegin={200} />
-                        <Line type="monotone" dataKey="cost" stroke="#EF4444" strokeWidth={2} name="成本" animationDuration={600} animationBegin={400} />
-                        <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="毛利" animationDuration={600} animationBegin={600} />
+                        <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2} name="收入" />
+                        <Line type="monotone" dataKey="cost" stroke="#EF4444" strokeWidth={2} name="成本" />
+                        <Line type="monotone" dataKey="profit" stroke="#10B981" strokeWidth={2} name="毛利" />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -211,9 +245,13 @@ export function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="top" className="mt-4">
+        {/* Top Items */}
+        <TabsContent value="top" className="mt-6">
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="h-4 w-4" />热销商品排行</CardTitle><CardDescription>按销量排序 Top 10</CardDescription></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Trophy className="h-4 w-4" />热销商品排行</CardTitle>
+              <CardDescription>按销量排序 Top 10</CardDescription>
+            </CardHeader>
             <CardContent>
               {topItems.length === 0 ? (
                 <EmptyState icon={Trophy} title="暂无数据" description="销售数据将显示热销排行" />
@@ -224,7 +262,7 @@ export function ReportsPage() {
                   </TableHeader>
                   <TableBody>
                     {topItems.map(([name, revenue, qty, avgPrice], idx) => (
-                      <TableRow key={name} className="animate-stagger" style={{ animationDelay: `${idx * 50}ms` }}>
+                      <TableRow key={name}>
                         <TableCell>
                           <Badge variant={idx < 3 ? "default" : "secondary"} className="w-8 h-6 flex items-center justify-center">{idx + 1}</Badge>
                         </TableCell>
@@ -241,15 +279,19 @@ export function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="category" className="mt-4 space-y-4">
+        {/* Category Sales */}
+        <TabsContent value="category" className="mt-6">
           <Card>
-            <CardHeader><CardTitle>分类销售</CardTitle><CardDescription>按菜单分类统计</CardDescription></CardHeader>
+            <CardHeader>
+              <CardTitle>分类销售</CardTitle>
+              <CardDescription>按菜单分类统计</CardDescription>
+            </CardHeader>
             <CardContent>
               {categoryData.length === 0 ? (
-                <EmptyState icon={BarChart3} title="暂无数据" description="分类销售统计将在此显示" />
+                <EmptyState icon={PieChartIcon} title="暂无数据" description="分类销售统计将在此显示" />
               ) : (
                 <>
-                  <div className="h-[300px] mb-4">
+                  <div className="h-[300px] mb-6">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -261,8 +303,6 @@ export function ReportsPage() {
                           outerRadius={100}
                           fill="#8884d8"
                           dataKey="value"
-                          animationDuration={600}
-                          animationBegin={200}
                         >
                           {categoryData.map((_entry, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -277,8 +317,8 @@ export function ReportsPage() {
                       <TableRow><TableHead>分类</TableHead><TableHead className="text-right">销售额</TableHead><TableHead className="text-right">销量</TableHead></TableRow>
                     </TableHeader>
                     <TableBody>
-                      {categoryData.map(([name, amount, qty], i) => (
-                        <TableRow key={name} className="animate-stagger" style={{ animationDelay: `${i * 50}ms` }}>
+                      {categoryData.map(([name, amount, qty]) => (
+                        <TableRow key={name}>
                           <TableCell className="font-medium">{name || "未分類"}</TableCell>
                           <TableCell className="text-right font-medium">¥{amount.toFixed(2)}</TableCell>
                           <TableCell className="text-right">{qty}</TableCell>
@@ -292,7 +332,8 @@ export function ReportsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="consumption" className="mt-4 space-y-4">
+        {/* Material Consumption */}
+        <TabsContent value="consumption" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle>原料消耗报表</CardTitle>
@@ -300,10 +341,10 @@ export function ReportsPage() {
             </CardHeader>
             <CardContent>
               {consumptionData.length === 0 ? (
-                <EmptyState icon={BarChart3} title="暂无数据" description="选择日期范围查询原料消耗数据" />
+                <EmptyState icon={Package} title="暂无数据" description="选择日期范围查询原料消耗数据" />
               ) : (
                 <>
-                  <div className="h-[300px] mb-4">
+                  <div className="h-[300px] mb-6">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={consumptionData.map(([name, qty, , cost]) => ({ name, qty, cost }))}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -327,8 +368,8 @@ export function ReportsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {consumptionData.map(([name, qty, avgCost, totalCost], i) => (
-                        <TableRow key={name} className="animate-stagger" style={{ animationDelay: `${i * 50}ms` }}>
+                      {consumptionData.map(([name, qty, avgCost, totalCost]) => (
+                        <TableRow key={name}>
                           <TableCell className="font-medium">{name || "未知名"}</TableCell>
                           <TableCell className="text-right">{qty.toFixed(2)}</TableCell>
                           <TableCell className="text-right">¥{avgCost.toFixed(2)}</TableCell>

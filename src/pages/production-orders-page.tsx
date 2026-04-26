@@ -225,7 +225,9 @@ export function ProductionOrdersPage({
             <Button variant="outline" onClick={() => setCompleteId(null)}>取消</Button>
             <Button onClick={() => {
               if (completeId) {
-                onCompleteOrder(completeId, parseFloat(completeActualQty) || 0);
+                const qty = parseFloat(completeActualQty);
+                if (isNaN(qty) || qty <= 0) return;
+                onCompleteOrder(completeId, qty);
                 setCompleteId(null);
               }
             }}>完成</Button>

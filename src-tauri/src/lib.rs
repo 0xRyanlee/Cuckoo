@@ -28,6 +28,8 @@ pub fn run() {
     
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(AppState { db })
         .invoke_handler(tauri::generate_handler![
             // 健康檢查
@@ -80,6 +82,7 @@ pub fn run() {
             commands::add_order_item,
             commands::submit_order,
             commands::cancel_order,
+            commands::batch_cancel_orders,
             // KDS
             commands::get_kitchen_stations,
             commands::get_station_tickets,
@@ -108,6 +111,7 @@ pub fn run() {
             commands::delete_supplier,
             commands::update_menu_item,
             commands::toggle_menu_item_availability,
+            commands::batch_toggle_menu_item_availability,
             commands::delete_menu_item,
             commands::update_menu_category,
             commands::delete_menu_category,
@@ -173,6 +177,7 @@ pub fn run() {
             commands::delete_print_template,
             commands::set_default_template,
             commands::render_template_preview,
+            commands::render_template_content_preview,
             // 通知系统
             commands::get_notifications,
             commands::get_unread_notification_count,

@@ -15,6 +15,7 @@ interface Material {
   id: number;
   name: string;
   code: string;
+  min_qty?: number;
 }
 
 interface Supplier {
@@ -96,7 +97,9 @@ export function InventoryPage({
   const [adjustForm, setAdjustForm] = useState({ lot_id: 0, qty_delta: "", reason: "" });
   const [wastageForm, setWastageForm] = useState({ lot_id: 0, qty: "", wastage_type: "normal" });
 
-  const lowStockItems = filteredSummary.filter((s) => s.available_qty < 10);
+  const minQtyMap = Object.fromEntries(materials.map((m) => [m.id, m.min_qty ?? 10]));
+  const getMinQty = (materialId: number) => minQtyMap[materialId] ?? 10;
+  const lowStockItems = filteredSummary.filter((s) => s.available_qty < getMinQty(s.material_id));
 
   const getTxnTypeBadge = (type: string) => {
     switch (type) {
@@ -112,8 +115,22 @@ export function InventoryPage({
 
   const getMaterialName = (id: number) => materials.find((m) => m.id === id)?.name || `材料 #${id}`;
 
+  function generateLotNo(): string {
+    const d = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+    const seq = pad(d.getHours()) + pad(d.getMinutes());
+    return `LOT-${date}-${seq}`;
+  }
+
+  function openBatchDialog() {
+    setBatchForm({ material_id: "", lot_no: generateLotNo(), quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "" });
+    setBatchDialogOpen(true);
+  }
+
   function handleCreateBatch() {
     if (!batchForm.material_id || !batchForm.lot_no || !batchForm.quantity) return;
+    if (parseFloat(batchForm.quantity) <= 0) return;
     onCreateBatch({
       material_id: parseInt(batchForm.material_id),
       lot_no: batchForm.lot_no,
@@ -149,7 +166,7 @@ export function InventoryPage({
           <p className="text-sm text-muted-foreground">入库、调整、损耗与库存追踪</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setBatchDialogOpen(true)}>
+          <Button onClick={openBatchDialog}>
             <Plus className="mr-2 h-4 w-4" />进货入库
           </Button>
         </div>
@@ -207,11 +224,11 @@ export function InventoryPage({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {inventorySummary.map((summary) => (
+                    {filteredSummary.map((summary) => (
                       <TableRow key={summary.material_id}>
                         <TableCell className="font-medium">{summary.material_name}</TableCell>
                         <TableCell className="text-right">{summary.total_qty.toFixed(2)}</TableCell>
-                        <TableCell className={`text-right font-medium ${summary.available_qty < 10 ? "text-destructive" : "text-emerald-500"}`}>
+                        <TableCell className={`text-right font-medium ${summary.available_qty < getMinQty(summary.material_id) ? "text-destructive" : "text-emerald-500"}`}>
                           {summary.available_qty.toFixed(2)}
                         </TableCell>
                       </TableRow>
@@ -238,17 +255,28 @@ export function InventoryPage({
                     <TableRow>
                       <TableHead>批次号</TableHead>
                       <TableHead className="text-right">数量</TableHead>
+                      <TableHead>效期</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredBatches.map((batch) => (
-                      <TableRow key={batch.id}>
+                    {filteredBatches.map((batch) => {
+                      const isExpired = batch.expiry_date && new Date(batch.expiry_date) < new Date();
+                      const isExpiringSoon = batch.expiry_date && !isExpired && new Date(batch.expiry_date) < new Date(Date.now() + 7 * 86400000);
+                      return (
+                      <TableRow key={batch.id} className={isExpired ? "bg-destructive/5" : isExpiringSoon ? "bg-amber-500/5" : ""}>
                         <TableCell>
                           <div className="font-mono text-xs">{batch.lot_no}</div>
                           <div className="text-xs text-muted-foreground">{getMaterialName(batch.material_id)}</div>
                         </TableCell>
                         <TableCell className="text-right">{batch.quantity.toFixed(2)}</TableCell>
+                        <TableCell>
+                          {batch.expiry_date ? (
+                            <span className={`text-xs font-mono ${isExpired ? "text-destructive font-medium" : isExpiringSoon ? "text-amber-500 font-medium" : "text-muted-foreground"}`}>
+                              {batch.expiry_date}{isExpired ? " ⚠️" : isExpiringSoon ? " ⏰" : ""}
+                            </span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setAdjustForm({ lot_id: batch.id, qty_delta: "", reason: "" }); setAdjustDialogOpen(true); }}>
@@ -260,7 +288,8 @@ export function InventoryPage({
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </ScrollArea>

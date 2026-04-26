@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, ShoppingCart, Eye, Send, X, Search, Filter, MinusCircle, PlusCircle, Package } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -59,10 +60,13 @@ interface OrdersPageProps {
   onCreateOrder: () => void;
   onSubmitOrder: (orderId: number) => void;
   onCancelOrder: (orderId: number) => void;
+  onBatchCancelOrder?: (ids: number[]) => void;
   onViewOrder: (orderId: number) => void;
   onAddModifier: (data: { order_item_id: number; modifier_type: string; material_id: number | null; qty: number; price_delta: number }) => void;
   onDeleteModifier: (modifier_id: number) => void;
   onLoadModifiers: (order_item_id: number) => Promise<OrderItemModifier[]>;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
   searchQuery?: string;
 }
 
@@ -74,12 +78,15 @@ export function OrdersPage({
   onCreateOrder,
   onSubmitOrder,
   onCancelOrder,
+  onBatchCancelOrder,
   onViewOrder,
   onAddModifier,
   onDeleteModifier,
   onLoadModifiers,
-  searchQuery,
+  onLoadMore,
+  hasMore,
 }: OrdersPageProps) {
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [modifierDialogOpen, setModifierDialogOpen] = useState(false);
   const [modifierOrderItemId, setModifierOrderItemId] = useState<number | null>(null);
@@ -87,8 +94,26 @@ export function OrdersPage({
   const [modifierMaterialId, setModifierMaterialId] = useState("");
   const [modifierQty, setModifierQty] = useState("1");
   const [modifierPriceDelta, setModifierPriceDelta] = useState("0");
+  const [selectedOrders, setSelectedOrders] = useState<number[]>([]);
 
   const [itemModifiers, setItemModifiers] = useState<Record<number, OrderItemModifier[]>>({});
+
+  const toggleSelectOrder = (id: number) => {
+    setSelectedOrders(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+  const selectAllOrders = () => {
+    if (selectedOrders.length === filteredOrders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders(filteredOrders.map(o => o.id));
+    }
+  };
+  const handleBatchCancel = () => {
+    if (onBatchCancelOrder && selectedOrders.length > 0) {
+      onBatchCancelOrder(selectedOrders);
+      setSelectedOrders([]);
+    }
+  };
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch = !searchQuery ||
@@ -129,11 +154,21 @@ export function OrdersPage({
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              订单列表
-            </CardTitle>
-            <CardDescription>共 {filteredOrders.length} 个订单{filteredOrders.length !== orders.length ? `（筛选自 ${orders.length} 个）` : ""}</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  订单列表
+                </CardTitle>
+                <CardDescription>共 {filteredOrders.length} 个订单{filteredOrders.length !== orders.length ? `（筛选自 ${orders.length} 个）` : ""}</CardDescription>
+              </div>
+              {selectedOrders.length > 0 && onBatchCancelOrder && (
+                <div className="flex gap-2">
+                  <span className="text-sm text-muted-foreground self-center">已选 {selectedOrders.length} 单</span>
+                  <Button size="sm" variant="outline" onClick={handleBatchCancel}>批量取消</Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex gap-2 mb-4">
@@ -141,9 +176,9 @@ export function OrdersPage({
                 <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="搜索订单号、类型..."
-                  value={searchQuery || ""}
-                  readOnly
-                  className="pl-8 bg-transparent border-border"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
                 />
               </div>
               <div className="flex items-center gap-1">
@@ -160,12 +195,17 @@ export function OrdersPage({
                 </Select>
               </div>
             </div>
-            {filteredOrders.length === 0 ? (
+            {orders.length === 0 ? (
               <EmptyState icon={ShoppingCart} title="暂无订单" description="创建订单后将在此显示" />
+            ) : filteredOrders.length === 0 ? (
+              <EmptyState icon={Search} title="无搜索结果" description="尝试调整搜索条件" />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0} onClick={selectAllOrders} />
+                    </TableHead>
                     <TableHead>订单号</TableHead>
                     <TableHead>类型</TableHead>
                     <TableHead>状态</TableHead>
@@ -176,6 +216,7 @@ export function OrdersPage({
                 <TableBody>
                   {filteredOrders.map((order) => (
                     <TableRow key={order.id}>
+                      <TableCell><Checkbox checked={selectedOrders.includes(order.id)} onClick={() => toggleSelectOrder(order.id)} /></TableCell>
                       <TableCell className="font-mono text-xs">{order.order_no}</TableCell>
                       <TableCell className="text-muted-foreground">{order.dine_type}</TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
@@ -203,6 +244,11 @@ export function OrdersPage({
                   ))}
                 </TableBody>
               </Table>
+            )}
+            {hasMore && onLoadMore && (
+              <div className="flex justify-center pt-2 pb-4">
+                <Button variant="outline" size="sm" onClick={onLoadMore}>載入更多訂單</Button>
+              </div>
             )}
           </CardContent>
         </Card>

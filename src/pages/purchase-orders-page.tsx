@@ -242,16 +242,19 @@ export function PurchaseOrdersPage({
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddItemPoId(null)}>取消</Button>
             <Button onClick={() => {
-              if (addItemPoId && addItemMaterialId) {
-                onAddItem({
-                  po_id: addItemPoId,
-                  material_id: parseInt(addItemMaterialId),
-                  qty: parseFloat(addItemQty) || 1,
-                  unit_id: addItemUnitId ? parseInt(addItemUnitId) : null,
-                  cost_per_unit: parseFloat(addItemCost) || 0,
-                });
-                setAddItemPoId(null);
-              }
+              if (!addItemPoId || !addItemMaterialId) return;
+              const qty = parseFloat(addItemQty);
+              const cost = parseFloat(addItemCost);
+              if (isNaN(qty) || qty <= 0) return;
+              if (isNaN(cost) || cost < 0) return;
+              onAddItem({
+                po_id: addItemPoId,
+                material_id: parseInt(addItemMaterialId),
+                qty,
+                unit_id: addItemUnitId ? parseInt(addItemUnitId) : null,
+                cost_per_unit: cost,
+              });
+              setAddItemPoId(null);
             }}>添加</Button>
           </DialogFooter>
         </DialogContent>

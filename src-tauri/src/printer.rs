@@ -11,6 +11,7 @@ pub struct LanPrinter {
     pub sn: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PrinterStatus {
     pub printer_id: i64,
@@ -20,6 +21,7 @@ pub struct PrinterStatus {
     pub error_msg: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PrintTaskRecord {
     pub id: i64,
@@ -61,7 +63,10 @@ fn get_stime() -> String {
 }
 
 fn feie_request(params: &[(String, String)]) -> Result<String, String> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP 客戶端初始化失敗: {}", e))?;
     let form = params.iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect::<Vec<_>>();
@@ -78,6 +83,7 @@ fn feie_request(params: &[(String, String)]) -> Result<String, String> {
     Ok(text)
 }
 
+#[allow(dead_code)]
 pub fn feie_add_printer(user: &str, ukey: &str, sn: &str, key: &str) -> Result<String, String> {
     let stime = get_stime();
     let sig = compute_feie_signature(user, ukey, &stime);
@@ -109,6 +115,7 @@ pub fn feie_print(user: &str, ukey: &str, sn: &str, content: &str) -> Result<Str
     feie_request(&params)
 }
 
+#[allow(dead_code)]
 pub fn feie_query_status(user: &str, ukey: &str, sn: &str) -> Result<String, String> {
     let stime = get_stime();
     let sig = compute_feie_signature(user, ukey, &stime);
@@ -130,6 +137,7 @@ pub struct EscPosBuilder {
     pub(crate) buffer: Vec<u8>,
 }
 
+#[allow(dead_code)]
 impl EscPosBuilder {
     pub fn new() -> Self {
         let mut buffer = Vec::new();
@@ -228,6 +236,7 @@ impl EscPosBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn qr_code(&mut self, content: &str, size: u8) -> &mut Self {
         let data = content.as_bytes();
         let len = data.len() + 3;
@@ -305,6 +314,7 @@ impl TsplBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_gap(label_width_mm: f64, label_height_mm: f64, gap_mm: f64) -> Self {
         Self {
             commands: vec![
@@ -324,6 +334,7 @@ impl TsplBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn text_with_rotation(&mut self, x: i32, y: i32, font: &str, size: (i32, i32), rotation: i32, content: &str) -> &mut Self {
         self.commands.push(format!(
             "TEXT {}, {}, \"{}\", {}, {}, {}, \"{}\"",
@@ -340,6 +351,7 @@ impl TsplBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn qr_code(&mut self, x: i32, y: i32, level: &str, cell_size: i32, content: &str) -> &mut Self {
         self.commands.push(format!(
             "QRCODE {}, {}, {}, {}, 0, \"{}\"",
@@ -348,6 +360,7 @@ impl TsplBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn box_draw(&mut self, x1: i32, y1: i32, x2: i32, y2: i32, thickness: i32) -> &mut Self {
         self.commands.push(format!(
             "BOX {}, {}, {}, {}, {}",
@@ -417,6 +430,7 @@ pub fn scan_lan_printers(subnet: &str, timeout_ms: u64) -> Vec<LanPrinter> {
     found
 }
 
+#[allow(dead_code)]
 pub fn scan_lan_printers_range(start_ip: &str, end_ip: &str, timeout_ms: u64) -> Vec<LanPrinter> {
     let mut found = Vec::new();
 
@@ -451,10 +465,11 @@ pub fn scan_lan_printers_range(start_ip: &str, end_ip: &str, timeout_ms: u64) ->
 
 // ==================== 局域网状态检查 ====================
 
+#[allow(dead_code)]
 pub fn check_lan_printer_status(ip: &str, port: i32) -> Result<String, String> {
     let addr = format!("{}:{}", ip, port);
     let mut stream = TcpStream::connect_timeout(
-        &addr.parse().map_err(|e| format!("无效地址"))?,
+        &addr.parse().map_err(|_| format!("无效地址"))?,
         Duration::from_secs(3),
     ).map_err(|_| "打印机离线")?;
     
@@ -544,6 +559,7 @@ pub fn build_batch_label_content(
 
 // ==================== 打印機狀態解析 ====================
 
+#[allow(dead_code)]
 pub fn parse_feie_status(response: &str) -> PrinterStatus {
     let mut status = PrinterStatus {
         printer_id: 0,
@@ -583,6 +599,7 @@ pub struct EscPosRenderer {
     current_font_size: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct HtmlLine {
     text: String,

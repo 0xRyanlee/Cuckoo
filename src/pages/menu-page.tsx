@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Plus, FileText, ToggleRight, ToggleLeft, Link, Pencil, Trash2, Edit2, Tag, Save, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -21,6 +22,7 @@ interface MenuPageProps {
   onCreateMenuCategory: (name: string) => void;
   onCreateMenuItem: (data: { name: string; price: number; category_id: number | null; recipe_id: number | null }) => void;
   onToggleAvailability: (id: number, is_available: boolean) => void;
+  onBatchToggleAvailability?: (ids: number[], is_available: boolean) => void;
   onUpdateMenuItem: (id: number, data: { name?: string; category_id?: number | null; recipe_id?: number | null; sales_price?: number }) => void;
   onDeleteMenuItem: (id: number) => void;
   onUpdateMenuCategory: (id: number, name: string) => void;
@@ -35,6 +37,7 @@ interface MenuPageProps {
 export function MenuPage({
   menuCategories, menuItems, recipes,
   onCreateMenuCategory, onCreateMenuItem, onToggleAvailability,
+  onBatchToggleAvailability,
   onUpdateMenuItem, onDeleteMenuItem, onUpdateMenuCategory, onDeleteMenuCategory,
   onGetSpecs, onCreateSpec, onUpdateSpec, onDeleteSpec,
   searchQuery,
@@ -49,6 +52,46 @@ export function MenuPage({
   const [newMenuItemPrice, setNewMenuItemPrice] = useState("");
   const [newMenuItemCategory, setNewMenuItemCategory] = useState("");
   const [newMenuItemRecipe, setNewMenuItemRecipe] = useState("");
+  const [priceError, setPriceError] = useState("");
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+
+  const toggleSelect = (id: number) => {
+    setSelectedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+  const selectAll = () => {
+    if (selectedItems.length === filteredMenuItems.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredMenuItems.map(i => i.id));
+    }
+  };
+  const handleBatchEnable = () => {
+    if (onBatchToggleAvailability && selectedItems.length > 0) {
+      onBatchToggleAvailability(selectedItems, true);
+      setSelectedItems([]);
+    }
+  };
+  const handleBatchDisable = () => {
+    if (onBatchToggleAvailability && selectedItems.length > 0) {
+      onBatchToggleAvailability(selectedItems, false);
+      setSelectedItems([]);
+    }
+  };
+
+  const handleCreateMenuItem = () => {
+    const price = parseFloat(newMenuItemPrice);
+    if (!newMenuItemName.trim()) return;
+    if (isNaN(price) || price <= 0) {
+      setPriceError("售价必须大于 0");
+      return;
+    }
+    setPriceError("");
+    onCreateMenuItem({ name: newMenuItemName, price, category_id: newMenuItemCategory ? parseInt(newMenuItemCategory) : null, recipe_id: newMenuItemRecipe ? parseInt(newMenuItemRecipe) : null });
+    setNewMenuItemName("");
+    setNewMenuItemPrice("");
+    setNewMenuItemCategory("");
+    setNewMenuItemRecipe("");
+  };
 
   const [editMenuItem, setEditMenuItem] = useState<MenuItem | null>(null);
   const [editMenuItemName, setEditMenuItemName] = useState("");
@@ -124,16 +167,35 @@ export function MenuPage({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="h-4 w-4" />菜单商品</CardTitle><CardDescription>共 {filteredMenuItems.length} 个商品{filteredMenuItems.length !== menuItems.length ? `（篩選自 ${menuItems.length} 个）` : ""}</CardDescription></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2"><FileText className="h-4 w-4" />菜单商品</CardTitle>
+                <CardDescription>共 {filteredMenuItems.length} 个商品{filteredMenuItems.length !== menuItems.length ? `（篩選自 ${menuItems.length} 个）` : ""}</CardDescription>
+              </div>
+              {selectedItems.length > 0 && onBatchToggleAvailability && (
+                <div className="flex gap-2">
+                  <span className="text-sm text-muted-foreground self-center">已选 {selectedItems.length} 项</span>
+                  <Button size="sm" variant="outline" onClick={handleBatchEnable}><ToggleRight className="h-4 w-4 mr-1" />批量上架</Button>
+                  <Button size="sm" variant="outline" onClick={handleBatchDisable}><ToggleLeft className="h-4 w-4 mr-1" />批量下架</Button>
+                </div>
+              )}
+            </div>
+          </CardHeader>
           <CardContent>
             {filteredMenuItems.length === 0 ? (
               <EmptyState icon={FileText} title="暂无菜单商品" description="新增菜单商品开始销售" />
             ) : (
               <Table>
-                <TableHeader><TableRow><TableHead>名称</TableHead><TableHead>分类</TableHead><TableHead>配方</TableHead><TableHead className="text-right">售价</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox checked={selectedItems.length === filteredMenuItems.length && filteredMenuItems.length > 0} onClick={selectAll} />
+                    </TableHead>
+                    <TableHead>名称</TableHead><TableHead>分类</TableHead><TableHead>配方</TableHead><TableHead className="text-right">售价</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {filteredMenuItems.map((item) => (
                     <TableRow key={item.id}>
+                      <TableCell><Checkbox checked={selectedItems.includes(item.id)} onClick={() => toggleSelect(item.id)} /></TableCell>
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{menuCategories.find((c) => c.id === item.category_id)?.name || "-"}</TableCell>
                       <TableCell className="text-xs">{item.recipe_id ? (<div className="flex items-center gap-1"><Link className="h-3 w-3 text-emerald-500" /><span className="text-emerald-500">{recipes.find((r) => r.id === item.recipe_id)?.name || `配方 #${item.recipe_id}`}</span></div>) : (<span className="text-muted-foreground">未绑定</span>)}</TableCell>
@@ -194,8 +256,9 @@ export function MenuPage({
               <div className="space-y-2"><Label>商品名称</Label><Input value={newMenuItemName} onChange={(e) => setNewMenuItemName(e.target.value)} placeholder="如: 麻辣小龙虾" /></div>
               <div className="space-y-2"><Label>分类</Label><Select value={newMenuItemCategory} onValueChange={setNewMenuItemCategory}><SelectTrigger><SelectValue placeholder="选择分类（可选）" /></SelectTrigger><SelectContent>{menuCategories.map((cat) => <SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>绑定配方</Label><Select value={newMenuItemRecipe} onValueChange={setNewMenuItemRecipe}><SelectTrigger><SelectValue placeholder="选择配方（可选）" /></SelectTrigger><SelectContent>{recipes.map((r) => <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.code})</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>售价</Label><Input type="number" value={newMenuItemPrice} onChange={(e) => setNewMenuItemPrice(e.target.value)} placeholder="0.00" /></div>
-              <Button className="w-full" onClick={() => { onCreateMenuItem({ name: newMenuItemName, price: parseFloat(newMenuItemPrice) || 0, category_id: newMenuItemCategory ? parseInt(newMenuItemCategory) : null, recipe_id: newMenuItemRecipe ? parseInt(newMenuItemRecipe) : null }); setNewMenuItemName(""); setNewMenuItemPrice(""); setNewMenuItemCategory(""); setNewMenuItemRecipe(""); }}><Plus className="mr-2 h-4 w-4" />新增</Button>
+              <div className="space-y-2"><Label>售价</Label><Input type="number" value={newMenuItemPrice} onChange={(e) => { setNewMenuItemPrice(e.target.value); setPriceError(""); }} placeholder="0.00" />
+                {priceError && <p className="text-xs text-destructive">{priceError}</p>}</div>
+              <Button className="w-full" onClick={handleCreateMenuItem} disabled={!newMenuItemName.trim()}><Plus className="mr-2 h-4 w-4" />新增</Button>
             </CardContent>
           </Card>
         </div>

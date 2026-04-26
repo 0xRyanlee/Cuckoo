@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Package, ChefHat, ShoppingCart, Layers, TrendingUp, AlertTriangle, BarChart3 } from "lucide-react";
+import { Package, ChefHat, ShoppingCart, Layers, TrendingUp, AlertTriangle, BarChart3, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AreaChart, Area, CartesianGrid, XAxis, YAxis, PieChart, Pie, Cell } from "recharts";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
@@ -19,6 +21,7 @@ interface DashboardProps {
     order_no: string;
     status: string;
     amount_total: number;
+    created_at: string;
   }>;
   inventorySummary: Array<{
     material_id: number;
@@ -31,17 +34,34 @@ interface DashboardProps {
 export function DashboardPage({
   materialsCount,
   recipesCount,
-  ordersCount,
+  ordersCount: _ordersCount,
   batchesCount,
   orders,
   inventorySummary,
-  loading = false,
+loading = false,
 }: DashboardProps) {
-  const lowStockItems = inventorySummary.filter((s) => s.available_qty < 10);
+  const [timeRange, setTimeRange] = useState<"today" | "week" | "month" | "all">("today");
+  const LOW_STOCK_THRESHOLD = 10;
+  const lowStockItems = inventorySummary.filter((s) => s.available_qty < LOW_STOCK_THRESHOLD);
+
+  // 時間篩選邏輯
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().split("T")[0];
+  const monthAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split("T")[0];
+
+  const filteredOrders = orders.filter((o) => {
+    if (timeRange === "all") return true;
+    const orderDate = (o.created_at || "").replace("T", " ").split(" ")[0];
+    if (timeRange === "today") return orderDate === todayStr;
+    if (timeRange === "week") return orderDate >= weekAgo;
+    if (timeRange === "month") return orderDate >= monthAgo;
+    return true;
+  });
 
   const totalInventory = inventorySummary.reduce((sum, s) => sum + s.available_qty, 0);
-  const totalOrderValue = orders.reduce((sum, o) => sum + o.amount_total, 0);
-  const avgOrderValue = orders.length > 0 ? totalOrderValue / orders.length : 0;
+  const totalOrderValue = filteredOrders.reduce((sum, o) => sum + o.amount_total, 0);
+  const avgOrderValue = filteredOrders.length > 0 ? totalOrderValue / filteredOrders.length : 0;
 
   const chartData = inventorySummary.slice(0, 8).map((s) => ({
     name: s.material_name.length > 6 ? s.material_name.slice(0, 6) + "..." : s.material_name,
@@ -62,17 +82,27 @@ export function DashboardPage({
   } satisfies ChartConfig;
 
   const statusData = [
-    { name: "待提交", value: orders.filter((o) => o.status === "pending").length },
-    { name: "已提交", value: orders.filter((o) => o.status === "submitted").length },
-    { name: "已完成", value: orders.filter((o) => o.status === "ready").length },
-    { name: "已取消", value: orders.filter((o) => o.status === "cancelled").length },
+    { name: "待提交", value: filteredOrders.filter((o) => o.status === "pending").length },
+    { name: "已提交", value: filteredOrders.filter((o) => o.status === "submitted").length },
+    { name: "已完成", value: filteredOrders.filter((o) => o.status === "ready").length },
+    { name: "已取消", value: filteredOrders.filter((o) => o.status === "cancelled").length },
   ].filter((s) => s.value > 0);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">仪表板</h2>
-        <p className="text-sm text-muted-foreground">系统概览与关键指标</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">仪表板</h2>
+          <p className="text-sm text-muted-foreground">系统概览与关键指标</p>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border p-1">
+          <Button variant={timeRange === "today" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setTimeRange("today")}>
+            <Calendar className="mr-1 h-3 w-3" />今日
+          </Button>
+          <Button variant={timeRange === "week" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setTimeRange("week")}>本周</Button>
+          <Button variant={timeRange === "month" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setTimeRange("month")}>本月</Button>
+          <Button variant={timeRange === "all" ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setTimeRange("all")}>全部</Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -104,7 +134,7 @@ export function DashboardPage({
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {loading ? <Skeleton className="h-8 w-16 mb-1" /> : <div className="text-2xl font-bold">{ordersCount}</div>}
+            {loading ? <Skeleton className="h-8 w-16 mb-1" /> : <div className="text-2xl font-bold">{filteredOrders.length}</div>}
             <p className="text-xs text-muted-foreground">累计订单 · 均值 ¥{loading ? "0.00" : avgOrderValue.toFixed(2)}</p>
           </CardContent>
         </Card>
@@ -246,7 +276,7 @@ export function DashboardPage({
                 <Skeleton className="h-4 w-[90%]" />
                 <Skeleton className="h-4 w-[80%]" />
               </div>
-            ) : orders.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <EmptyState icon={ShoppingCart} title="暂无订单" description="创建订单后将在此显示" />
             ) : (
               <Table>
@@ -258,12 +288,12 @@ export function DashboardPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {orders.slice(0, 5).map((order, i) => (
+                  {filteredOrders.slice(0, 5).map((order, i) => (
                     <TableRow key={order.id} className="animate-stagger" style={{ animationDelay: `${i * 50}ms` }}>
                       <TableCell className="font-medium">{order.order_no}</TableCell>
                       <TableCell>
-                        <Badge variant={order.status === "completed" ? "default" : "secondary"}>
-                          {order.status}
+                        <Badge variant={order.status === "ready" || order.status === "cancelled" ? "default" : "secondary"}>
+                          {order.status === "pending" ? "待提交" : order.status === "submitted" ? "已提交" : order.status === "ready" ? "已完成" : order.status === "cancelled" ? "已取消" : order.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -283,7 +313,7 @@ export function DashboardPage({
               <AlertTriangle className="h-4 w-4" />
               库存预警
             </CardTitle>
-            <CardDescription>可用库存低于 10 的材料</CardDescription>
+            <CardDescription>可用库存低于 {LOW_STOCK_THRESHOLD} 的材料</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (

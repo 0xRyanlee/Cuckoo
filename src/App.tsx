@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -21,55 +22,25 @@ import { ProductionOrdersPage } from "@/pages/production-orders-page";
 import { StocktakesPage } from "@/pages/stocktakes-page";
 import { ReportsPage } from "@/pages/reports-page";
 import { PrintTemplatesPage } from "@/pages/print-templates-page";
-import { PrintPreviewPage } from "@/pages/print-preview-page";
+import { PrintSettingsPage } from "@/pages/print-settings-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { toast } from "sonner";
+import type {
+  Unit, MaterialCategory, TagItem, Material, Recipe,
+  RecipeWithItems, RecipeCostResult, MenuItem, MenuCategory, OrderItemModifier,
+  Order, OrderWithItems, MenuItemSpec, POSCartItem, KitchenStation, TicketWithItems,
+  InventoryBatch, InventorySummary, AttributeTemplate, InventoryTxn, Supplier, MaterialState,
+  PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems
+} from "./types";
 
-// ==================== 类型定义 ====================
-
-interface Unit { id: number; code: string; name: string; }
-interface MaterialCategory { id: number; code: string; name: string; }
-interface TagItem { id: number; code: string; name: string; color?: string; }
-interface Material {
-  id: number; code: string; name: string; category_id: number | null;
-  base_unit_id: number; tags: TagItem[]; category?: MaterialCategory; base_unit?: Unit;
-}
-interface Recipe { id: number; code: string; name: string; recipe_type: string; output_qty: number; }
-interface RecipeItem { id: number; recipe_id: number; item_type: string; ref_id: number; qty: number; unit_id: number; wastage_rate: number; note: string | null; sort_no: number; }
-interface RecipeWithItems { recipe: Recipe; items: RecipeItem[]; }
-interface RecipeCostItem { material_name: string; qty: number; unit: string; cost_per_unit: number; wastage_rate: number; line_cost: number; }
-interface RecipeCostResult { recipe_id: number; recipe_name: string; total_cost: number; cost_per_unit: number; output_qty: number; items: RecipeCostItem[]; }
-interface MenuItem { id: number; name: string; sales_price: number; is_available: boolean; recipe_id: number | null; category_id: number | null; }
-interface MenuCategory { id: number; name: string; }
-interface OrderItem { id: number; order_id: number; menu_item_id: number; spec_code: string | null; qty: number; unit_price: number; note: string | null; }
-interface OrderItemModifier { id: number; order_item_id: number; modifier_type: string; material_id: number | null; material_name: string | null; qty: number; price_delta: number; }
-interface Order { id: number; order_no: string; source: string; dine_type: string; table_no: string | null; status: string; amount_total: number; note: string | null; created_at: string; updated_at: string; }
-interface OrderWithItems { order: Order; items: OrderItem[]; }
-interface MenuItemSpec { id: number; menu_item_id: number; spec_code: string; spec_name: string; price_delta: number; qty_multiplier: number; }
-interface POSCartItem { menu_item: MenuItem; spec: MenuItemSpec | null; qty: number; note: string; }
-interface KitchenStation { id: number; code: string; name: string; station_type: string; }
-interface TicketWithItems { id: number; order_id: number; station_id: number; status: string; priority: number; printed_at: string | null; started_at: string | null; finished_at: string | null; created_at: string; order_no: string; dine_type: string; table_no: string | null; items: OrderItem[]; }
-interface InventoryBatch { id: number; material_id: number; lot_no: string; quantity: number; cost_per_unit: number; expiry_date: string | null; supplier_id: number | null; }
-interface InventorySummary { material_id: number; material_name: string; total_qty: number; reserved_qty: number; available_qty: number; }
-interface AttributeTemplate { id: number; entity_type: string; category: string | null; attr_code: string; attr_name: string; data_type: string; unit: string | null; default_value: number | null; formula: string | null; }
-interface InventoryTxn { id: number; txn_no: string; txn_type: string; ref_type: string | null; ref_id: number | null; lot_id: number | null; material_id: number; qty_delta: number; created_at: string; }
-interface Supplier { id: number; name: string; phone: string | null; contact_person: string | null; address: string | null; note: string | null; }
-interface MaterialState { id: number; material_id: number; state_code: string; state_name: string; unit_id: number | null; yield_rate: number; cost_multiplier: number; is_active: boolean; }
-interface PurchaseOrder { id: number; po_no: string; supplier_id: number | null; supplier_name: string | null; status: string; expected_date: string | null; total_cost: number; created_at: string; }
-interface PurchaseOrderItem { id: number; po_id: number; material_id: number; material_name: string | null; qty: number; unit_id: number | null; unit_name: string | null; cost_per_unit: number; received_qty: number; }
-interface PurchaseOrderWithItems { order: PurchaseOrder; items: PurchaseOrderItem[]; }
-interface ProductionOrder { id: number; production_no: string; recipe_id: number; recipe_name: string | null; status: string; planned_qty: number; actual_qty: number | null; operator: string | null; started_at: string | null; completed_at: string | null; created_at: string; }
-interface ProductionOrderItem { id: number; production_id: number; material_id: number; material_name: string | null; lot_id: number | null; planned_qty: number; actual_qty: number | null; }
-interface ProductionOrderWithItems { order: ProductionOrder; items: ProductionOrderItem[]; }
-interface Stocktake { id: number; stocktake_no: string; status: string; operator: string | null; note: string | null; created_at: string; completed_at: string | null; }
-interface StocktakeItem { id: number; stocktake_id: number; lot_id: number | null; material_id: number; material_name: string | null; system_qty: number; actual_qty: number; diff_qty: number | null; note: string | null; }
-interface StocktakeWithItems { stocktake: Stocktake; items: StocktakeItem[]; }
-
-// ==================== 主应用 ====================
+// ==================== App ====================
 
 function App() {
-  const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeTab = location.pathname.slice(1) || "dashboard";
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,8 +55,9 @@ function App() {
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersHasMore, setOrdersHasMore] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
-  const [_stations, setStations] = useState<KitchenStation[]>([]);
+  const [stations, setStations] = useState<KitchenStation[]>([]);
   const [kdsTickets, setKdsTickets] = useState<TicketWithItems[]>([]);
   const [inventoryBatches, setInventoryBatches] = useState<InventoryBatch[]>([]);
   const [inventorySummary, setInventorySummary] = useState<InventorySummary[]>([]);
@@ -116,7 +88,9 @@ function App() {
       setRecipes(await invoke<Recipe[]>("get_recipes"));
       setMenuCategories(await invoke<MenuCategory[]>("get_menu_categories"));
       setMenuItems(await invoke<MenuItem[]>("get_menu_items"));
-      setOrders(await invoke<Order[]>("get_orders"));
+      const fetchedOrders = await invoke<Order[]>("get_orders", { limit: 200, offset: 0 });
+      setOrders(fetchedOrders);
+      setOrdersHasMore(fetchedOrders.length === 200);
       setStations(await invoke<KitchenStation[]>("get_kitchen_stations"));
       setInventoryBatches(await invoke<InventoryBatch[]>("get_inventory_batches"));
       setInventorySummary(await invoke<InventorySummary[]>("get_inventory_summary"));
@@ -235,6 +209,15 @@ function App() {
     catch (e) { toast.error("切换菜品状态失败", { description: String(e) }); }
   }
 
+  async function handleBatchToggleMenuItem(ids: number[], is_available: boolean) {
+    try { 
+      const count = await invoke<number>("batch_toggle_menu_item_availability", { ids, isAvailable: is_available }); 
+      toast.success(`已批量切换 ${count} 个菜品`); 
+      loadData(); 
+    }
+    catch (e) { toast.error("批量切换失败", { description: String(e) }); }
+  }
+
   async function handleUpdateMenuItem(id: number, data: { name?: string; category_id?: number | null; recipe_id?: number | null; sales_price?: number }) {
     try { await invoke("update_menu_item", { id, name: data.name || null, categoryId: data.category_id, recipeId: data.recipe_id, salesPrice: data.sales_price }); toast.success("菜品已更新"); loadData(); }
     catch (e) { toast.error("更新菜品失败", { description: String(e) }); }
@@ -253,6 +236,14 @@ function App() {
     setConfirmAction({ title: "确认删除菜单分类", description: "删除后无法恢复，确定要删除此分类吗？", onConfirm: async () => { try { await invoke("delete_menu_category", { id }); toast.success("分类已删除"); loadData(); } catch (e) { toast.error("删除分类失败", { description: String(e) }); } } });
   }
 
+  async function handleLoadMoreOrders() {
+    try {
+      const more = await invoke<Order[]>("get_orders", { limit: 200, offset: orders.length });
+      setOrders((prev) => [...prev, ...more]);
+      setOrdersHasMore(more.length === 200);
+    } catch (e) { toast.error("載入訂單失敗", { description: String(e) }); }
+  }
+
   async function handleCreateOrder() {
     try {
       await invoke("create_order", { req: { source: "pos", dine_type: "dine_in", table_no: null } });
@@ -261,10 +252,9 @@ function App() {
     } catch (e) { toast.error("创建订单失败", { description: String(e) }); }
   }
 
-  async function handlePOSOrder(cart: POSCartItem[]) {
+  async function handlePOSOrder(cart: POSCartItem[], dineType: string = "dine_in", tableNo: string | null = null) {
     try {
-      const orderNo = await invoke<string>("create_order", { req: { source: "pos", dine_type: "dine_in", table_no: null } });
-      const orderId = parseInt(orderNo.replace("ORD", ""));
+      const { id: orderId } = await invoke<{ id: number; order_no: string }>("create_order", { req: { source: "pos", dine_type: dineType, table_no: tableNo } });
       for (const item of cart) {
         await invoke("add_order_item", {
           req: {
@@ -283,10 +273,9 @@ function App() {
     } catch (e) { toast.error("创建订单失败", { description: String(e) }); return false; }
   }
 
-  async function handlePOSAndSubmit(cart: POSCartItem[]) {
+  async function handlePOSAndSubmit(cart: POSCartItem[], dineType: string = "dine_in", tableNo: string | null = null) {
     try {
-      const orderNo = await invoke<string>("create_order", { req: { source: "pos", dine_type: "dine_in", table_no: null } });
-      const orderId = parseInt(orderNo.replace("ORD", ""));
+      const { id: orderId, order_no: orderNo } = await invoke<{ id: number; order_no: string }>("create_order", { req: { source: "pos", dine_type: dineType, table_no: tableNo } });
       const printItems: [string, number, string | null][] = cart.map((item) => [
         item.menu_item.name,
         item.qty,
@@ -306,9 +295,10 @@ function App() {
       }
       await invoke("submit_order", { orderId });
       try {
+        const dineTypeLabel = dineType === "dine_in" ? "堂食" : dineType === "takeout" ? "外帶" : "外送";
         await invoke("print_kitchen_ticket", {
           orderNo,
-          dineType: "堂食",
+          dineType: dineTypeLabel,
           items: printItems,
           note: null,
           printerId: null,
@@ -449,12 +439,13 @@ function App() {
       toast.success("批次已创建", { description: data.lot_no });
       const mat = materials.find((m) => m.id === data.material_id);
       const sup = suppliers.find((s) => s.id === data.supplier_id);
+      const unitCode = mat?.base_unit?.code || units.find((u) => u.id === mat?.base_unit_id)?.code || "";
       try {
         await invoke("print_batch_label", {
           lotNo: data.lot_no,
           materialName: mat?.name || `材料 #${data.material_id}`,
           quantity: data.quantity,
-          unit: "kg",
+          unit: unitCode,
           expiryDate: data.expiry_date,
           supplierName: sup?.name || null,
           printerId: null,
@@ -500,6 +491,10 @@ function App() {
 
   async function handleCancelOrder(orderId: number) {
     setConfirmAction({ title: "确认取消订单", description: "取消订单将回退已扣减的库存，确定要取消此订单吗？", onConfirm: async () => { try { await invoke("cancel_order", { orderId }); toast.success("订单已取消"); loadData(); } catch (e) { toast.error("取消订单失败", { description: String(e) }); } } });
+  }
+
+  async function handleBatchCancelOrder(ids: number[]) {
+    setConfirmAction({ title: "批量取消订单", description: `确定要取消 ${ids.length} 个订单吗？取消后将回退已扣减的库存。`, onConfirm: async () => { try { const count = await invoke<number>("batch_cancel_orders", { ids }); toast.success(`已取消 ${count} 个订单`); loadData(); } catch (e) { toast.error("批量取消失败", { description: String(e) }); } } });
   }
 
   async function handleViewOrder(orderId: number) {
@@ -550,61 +545,35 @@ function App() {
   }
 
   return (
+    <ErrorBoundary>
     <TooltipProvider>
       <SidebarProvider>
         <div className="flex h-screen w-full bg-background">
-          <AppSidebar activeTab={activeTab} onTabChange={setActiveTab} connected={connected} />
+          <AppSidebar activeTab={activeTab} onTabChange={(tab) => navigate("/" + tab)} connected={connected} />
           <SidebarInset className="flex flex-col">
             <AppHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onRefresh={loadData} refreshing={loading} />
             <main className="flex-1 overflow-auto p-6">
-              <div key={activeTab} className="animate-page-enter">
-              {activeTab === "dashboard" && (
-                <DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />
-              )}
-              {activeTab === "materials" && (
-                <MaterialsPage materials={materials} categories={categories} tags={tags} units={units} onCreateMaterial={handleCreateMaterial} onUpdateMaterial={handleUpdateMaterial} onDeleteMaterial={handleDeleteMaterial} onRemoveMaterialTag={handleRemoveMaterialTag} onCreateCategory={handleCreateCategory} onDeleteCategory={handleDeleteCategory} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} searchQuery={searchQuery} />
-              )}
-              {activeTab === "recipes" && (
-                <RecipesPage recipes={recipes} selectedRecipe={selectedRecipe} recipeCost={recipeCost} materials={materials} units={units} onCreateRecipe={handleCreateRecipe} onViewRecipe={handleViewRecipe} onDeleteRecipe={handleDeleteRecipe} onUpdateRecipe={handleUpdateRecipe} onAddRecipeItem={handleAddRecipeItem} onDeleteRecipeItem={handleDeleteRecipeItem} onRecalculateCost={handleRecalculateCost} searchQuery={searchQuery} />
-              )}
-              {activeTab === "inventory" && (
-                <InventoryPage inventorySummary={inventorySummary} inventoryBatches={inventoryBatches} inventoryTxns={inventoryTxns} materials={materials} suppliers={suppliers} onCreateBatch={handleCreateBatch} onAdjustInventory={handleAdjustInventory} onRecordWastage={handleRecordWastage} onDeleteBatch={handleDeleteBatch} searchQuery={searchQuery} />
-              )}
-              {activeTab === "menu" && (
-                <MenuPage menuCategories={menuCategories} menuItems={menuItems} recipes={recipes} onCreateMenuCategory={handleCreateMenuCategory} onCreateMenuItem={handleCreateMenuItemFull} onToggleAvailability={handleToggleMenuItem} onUpdateMenuItem={handleUpdateMenuItem} onDeleteMenuItem={handleDeleteMenuItem} onUpdateMenuCategory={handleUpdateMenuCategory} onDeleteMenuCategory={handleDeleteMenuCategory} onGetSpecs={handleGetSpecs} onCreateSpec={handleCreateSpec} onUpdateSpec={handleUpdateSpec} onDeleteSpec={handleDeleteSpec} searchQuery={searchQuery} />
-              )}
-              {activeTab === "pos" && (
-                <POSPage menuCategories={menuCategories} menuItems={menuItems} onCreateOrder={handlePOSOrder} onCreateAndSubmit={handlePOSAndSubmit} onGetSpecs={handleGetSpecs} searchQuery={searchQuery} loading={loading} />
-              )}
-              {activeTab === "suppliers" && (
-                <SuppliersPage suppliers={suppliers} onCreateSupplier={handleCreateSupplier} onUpdateSupplier={handleUpdateSupplier} onDeleteSupplier={handleDeleteSupplier} searchQuery={searchQuery} />
-              )}
-              {activeTab === "orders" && (
-                <OrdersPage orders={orders} selectedOrder={selectedOrder} menuItems={Object.fromEntries(menuItems.map((item) => [item.id, item.name]))} materials={materials} onCreateOrder={handleCreateOrder} onSubmitOrder={handleSubmitOrder} onCancelOrder={handleCancelOrder} onViewOrder={handleViewOrder} onAddModifier={async (data) => { try { await invoke("add_order_item_modifier", { req: data }); toast.success("加料已添加"); } catch (e) { toast.error("添加加料失败", { description: String(e) }); } }} onDeleteModifier={async (modifier_id) => { try { await invoke("delete_order_item_modifier", { modifierId: modifier_id }); toast.success("加料已删除"); } catch (e) { toast.error("删除加料失败", { description: String(e) }); } }} onLoadModifiers={async (order_item_id) => { return await invoke<OrderItemModifier[]>("get_order_item_modifiers", { orderItemId: order_item_id }); }} searchQuery={searchQuery} />
-              )}
-              {activeTab === "kds" && (
-                <KDSPage allTickets={kdsTickets} onStartTicket={async (id) => { try { await invoke("start_ticket", { ticketId: id, operator: null }); toast.success("工单已开始"); loadData(); } catch (e) { toast.error("开始工单失败", { description: String(e) }); } }} onFinishTicket={async (id) => { const ticket = kdsTickets.find((t) => t.id === id); if (ticket) { await handleFinishTicket(ticket); } else { await invoke("finish_ticket", { ticketId: id, operator: null }); toast.success("工单已完成"); loadData(); } }} onRefresh={handleLoadKDS} />
-              )}
-              {activeTab === "attributes" && (
-                <AttributesPage attributeTemplates={attributeTemplates} />
-              )}
-              {activeTab === "settings" && <SettingsPage connected={connected} />}
-              {activeTab === "material-states" && (
-                <MaterialStatesPage materialStates={materialStates} materials={materials} units={units} onCreateState={handleCreateMaterialState} onUpdateState={handleUpdateMaterialState} onDeleteState={handleDeleteMaterialState} searchQuery={searchQuery} />
-              )}
-              {activeTab === "purchase-orders" && (
-                <PurchaseOrdersPage orders={purchaseOrders} materials={materials} units={units} suppliers={suppliers} onCreateOrder={handleCreatePurchaseOrder} onAddItem={handleAddPurchaseOrderItem} onViewOrder={handleViewPurchaseOrder} onDeleteOrder={handleDeletePurchaseOrder} onReceiveOrder={handleReceivePurchaseOrder} selectedOrder={selectedPurchaseOrder} searchQuery={searchQuery} />
-              )}
-              {activeTab === "production-orders" && (
-                <ProductionOrdersPage orders={productionOrders} recipes={recipes} onCreateOrder={handleCreateProductionOrder} onStartOrder={handleStartProductionOrder} onCompleteOrder={handleCompleteProductionOrder} onViewOrder={handleViewProductionOrder} onDeleteOrder={handleDeleteProductionOrder} selectedOrder={selectedProductionOrder} searchQuery={searchQuery} />
-              )}
-              {activeTab === "stocktakes" && (
-                <StocktakesPage stocktakes={stocktakes} onCreateStocktake={handleCreateStocktake} onUpdateItem={handleUpdateStocktakeItem} onCompleteStocktake={handleCompleteStocktake} onViewStocktake={handleViewStocktake} onDeleteStocktake={handleDeleteStocktake} selectedStocktake={selectedStocktake} searchQuery={searchQuery} />
-              )}
-              {activeTab === "reports" && <ReportsPage />}
-              {activeTab === "print-templates" && <PrintTemplatesPage />}
-              {activeTab === "print-preview" && <PrintPreviewPage />}
-              </div>
+              <Routes>
+                <Route path="/dashboard" element={<DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />} />
+                <Route path="/materials" element={<MaterialsPage materials={materials} categories={categories} tags={tags} units={units} onCreateMaterial={handleCreateMaterial} onUpdateMaterial={handleUpdateMaterial} onDeleteMaterial={handleDeleteMaterial} onRemoveMaterialTag={handleRemoveMaterialTag} onCreateCategory={handleCreateCategory} onDeleteCategory={handleDeleteCategory} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} searchQuery={searchQuery} />} />
+                <Route path="/recipes" element={<RecipesPage recipes={recipes} selectedRecipe={selectedRecipe} recipeCost={recipeCost} materials={materials} units={units} onCreateRecipe={handleCreateRecipe} onViewRecipe={handleViewRecipe} onDeleteRecipe={handleDeleteRecipe} onUpdateRecipe={handleUpdateRecipe} onAddRecipeItem={handleAddRecipeItem} onDeleteRecipeItem={handleDeleteRecipeItem} onRecalculateCost={handleRecalculateCost} searchQuery={searchQuery} />} />
+                <Route path="/inventory" element={<InventoryPage inventorySummary={inventorySummary} inventoryBatches={inventoryBatches} inventoryTxns={inventoryTxns} materials={materials} suppliers={suppliers} onCreateBatch={handleCreateBatch} onAdjustInventory={handleAdjustInventory} onRecordWastage={handleRecordWastage} onDeleteBatch={handleDeleteBatch} searchQuery={searchQuery} />} />
+                <Route path="/menu" element={<MenuPage menuCategories={menuCategories} menuItems={menuItems} recipes={recipes} onCreateMenuCategory={handleCreateMenuCategory} onCreateMenuItem={handleCreateMenuItemFull} onToggleAvailability={handleToggleMenuItem} onBatchToggleAvailability={handleBatchToggleMenuItem} onUpdateMenuItem={handleUpdateMenuItem} onDeleteMenuItem={handleDeleteMenuItem} onUpdateMenuCategory={handleUpdateMenuCategory} onDeleteMenuCategory={handleDeleteMenuCategory} onGetSpecs={handleGetSpecs} onCreateSpec={handleCreateSpec} onUpdateSpec={handleUpdateSpec} onDeleteSpec={handleDeleteSpec} searchQuery={searchQuery} />} />
+                <Route path="/pos" element={<POSPage menuCategories={menuCategories} menuItems={menuItems} onCreateOrder={handlePOSOrder} onCreateAndSubmit={handlePOSAndSubmit} onGetSpecs={handleGetSpecs} searchQuery={searchQuery} loading={loading} />} />
+                <Route path="/suppliers" element={<SuppliersPage suppliers={suppliers} onCreateSupplier={handleCreateSupplier} onUpdateSupplier={handleUpdateSupplier} onDeleteSupplier={handleDeleteSupplier} searchQuery={searchQuery} />} />
+                <Route path="/orders" element={<OrdersPage orders={orders} selectedOrder={selectedOrder} menuItems={Object.fromEntries(menuItems.map((item) => [item.id, item.name]))} materials={materials} onCreateOrder={handleCreateOrder} onSubmitOrder={handleSubmitOrder} onCancelOrder={handleCancelOrder} onBatchCancelOrder={handleBatchCancelOrder} onViewOrder={handleViewOrder} onAddModifier={async (data) => { try { await invoke("add_order_item_modifier", { req: data }); toast.success("加料已添加"); } catch (e) { toast.error("添加加料失败", { description: String(e) }); } }} onDeleteModifier={async (modifier_id) => { try { await invoke("delete_order_item_modifier", { modifierId: modifier_id }); toast.success("加料已删除"); } catch (e) { toast.error("删除加料失败", { description: String(e) }); } }} onLoadModifiers={async (order_item_id) => { return await invoke<OrderItemModifier[]>("get_order_item_modifiers", { orderItemId: order_item_id }); }} onLoadMore={handleLoadMoreOrders} hasMore={ordersHasMore} searchQuery={searchQuery} />} />
+                <Route path="/kds" element={<KDSPage allTickets={kdsTickets} stations={stations} menuItemNames={Object.fromEntries(menuItems.map((m) => [m.id, m.name]))} onStartTicket={async (id) => { try { await invoke("start_ticket", { ticketId: id, operator: null }); toast.success("工单已开始"); loadData(); } catch (e) { toast.error("开始工单失败", { description: String(e) }); } }} onFinishTicket={async (id) => { const ticket = kdsTickets.find((t) => t.id === id); if (ticket) { await handleFinishTicket(ticket); } else { await invoke("finish_ticket", { ticketId: id, operator: null }); toast.success("工单已完成"); loadData(); } }} onRefresh={handleLoadKDS} />} />
+                <Route path="/attributes" element={<AttributesPage attributeTemplates={attributeTemplates} />} />
+                <Route path="/settings" element={<SettingsPage connected={connected} />} />
+                <Route path="/material-states" element={<MaterialStatesPage materialStates={materialStates} materials={materials} units={units} onCreateState={handleCreateMaterialState} onUpdateState={handleUpdateMaterialState} onDeleteState={handleDeleteMaterialState} searchQuery={searchQuery} />} />
+                <Route path="/purchase-orders" element={<PurchaseOrdersPage orders={purchaseOrders} materials={materials} units={units} suppliers={suppliers} onCreateOrder={handleCreatePurchaseOrder} onAddItem={handleAddPurchaseOrderItem} onViewOrder={handleViewPurchaseOrder} onDeleteOrder={handleDeletePurchaseOrder} onReceiveOrder={handleReceivePurchaseOrder} selectedOrder={selectedPurchaseOrder} searchQuery={searchQuery} />} />
+                <Route path="/production-orders" element={<ProductionOrdersPage orders={productionOrders} recipes={recipes} onCreateOrder={handleCreateProductionOrder} onStartOrder={handleStartProductionOrder} onCompleteOrder={handleCompleteProductionOrder} onViewOrder={handleViewProductionOrder} onDeleteOrder={handleDeleteProductionOrder} selectedOrder={selectedProductionOrder} searchQuery={searchQuery} />} />
+                <Route path="/stocktakes" element={<StocktakesPage stocktakes={stocktakes} onCreateStocktake={handleCreateStocktake} onUpdateItem={handleUpdateStocktakeItem} onCompleteStocktake={handleCompleteStocktake} onViewStocktake={handleViewStocktake} onDeleteStocktake={handleDeleteStocktake} selectedStocktake={selectedStocktake} searchQuery={searchQuery} />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/print-templates" element={<PrintTemplatesPage />} />
+                <Route path="/print-settings" element={<PrintSettingsPage />} />
+                <Route path="*" element={<DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />} />
+              </Routes>
             </main>
           </SidebarInset>
         </div>
@@ -618,6 +587,7 @@ function App() {
         onConfirm={() => confirmAction?.onConfirm()}
       />
     </TooltipProvider>
+    </ErrorBoundary>
   );
 }
 

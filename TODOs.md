@@ -1,163 +1,120 @@
 # 📋 Cuckoo TODOs — 開發任務清單
 
-> **Last Updated**: 2026-04-24 | **Version**: v1.0.0
+> **Last Updated**: 2026-04-26 | **Version**: v1.1.0
+>
+> 本清單基於 2026-04-26 對抗性審計 v4.0，反映當前真實狀態。
 
 ---
 
-## 🔴 High Priority / 高優先級
+## 🔴 P0 — 生產阻斷（已全部修復）
 
-### Bug Fixes / 錯誤修復
-
-- [ ] **清理 Rust 編譯警告** — ~10+ unused variables in `commands.rs` and `database.rs`
-- [ ] **訂單完成時實扣庫存** — `finish_ticket` 應觸發實際庫存扣減（目前僅預扣）
-- [ ] **打印指令調試** — ESC/POS 指令需實機測試驗證
-- [ ] **成本計算返回值類型** — `calculate_recipe_cost` 返回 `f64` 而非完整 `RecipeCostResult`
-
-### Release Prep / 發佈準備
-
-- [ ] **選擇並應用新 Logo** — 從 `logo-option-{a,b,c,d}.svg` 中選擇，替換 `icon.svg` 並重新生成所有圖標
-- [ ] **代碼簽名 (macOS)** — 配置 Apple Developer 證書 (`signingIdentity`)
-- [ ] **代碼簽名 (Windows)** — 配置 EV 證書 (`certificateThumbprint`)
-- [ ] **測試構建產物** — 在乾淨環境測試 `.dmg` 和 `.msi` 安裝
-- [ ] **更新版本號** — `package.json`, `Cargo.toml`, `tauri.conf.json` 保持一致
+- [x] **採購單狀態 SQL `?1→?2`** — `database.rs:2666` ✅
+- [x] **POS orderId 提取錯誤** — 前端使用實際 row ID ✅
+- [x] **submit_order 不創建廚房工單** — 調用 `create_kitchen_tickets` ✅
+- [x] **calculate_recipe_cost 返回 f64** — 改返回完整 `RecipeCostResult` ✅
+- [x] **adjust_inventory 語義錯誤** — delta → 絕對值混淆，加負庫存防護 ✅
+- [x] **order_no 毫秒精度** — `%Y%m%d%H%M%S%3f` ✅
 
 ---
 
-## 🟡 Medium Priority / 中優先級
+## 🟠 P1 — 重要功能缺陷（已全部修復）
 
-### Features / 功能完善
+### Bug Fixes
 
-- [ ] **採購入庫 UI 優化** — 完善採購單→入庫→批次生成的用戶體驗
-- [ ] **半成品管理 UI** — 生產單投料/產出流程界面優化
+- [x] **POS 雙 ¥ 符號** — 移除多餘前綴 ✅
+- [x] **廚房單硬編碼「堂食」** — 動態讀取 dineType ✅
+- [x] **批次標籤硬編碼「kg」** — 讀取材料 base_unit ✅
+- [x] **Dashboard 最近訂單不受時間篩選影響** — 改用 filteredOrders ✅
+- [x] **record_wastage 無負庫存保護** — 加 `qty > current_qty` 檢查 ✅
+- [x] **訂單列表硬限 100 筆** — 改為分頁參數，預設 200 ✅
+- [x] **KDS 工單不顯示菜品名** — menuItemNames prop 傳入 ✅
+- [x] **KDS 無超時視覺警告** — 超 15 分鐘紅色邊框 + AlertCircle ✅
+- [x] **入庫表單允許零或負數** — 加 `quantity > 0` 驗證 ✅
+- [x] **規格選擇必填無法跳過** — 移除 disabled 限制 ✅
+- [x] **批次號無自動生成** — 開啟對話框時自動填充 ✅
+- [x] **POS localStorage 購物車價格陳舊** — 還原時重新水合 ✅
+
+### 安全與數據完整性
+
+- [x] **廢棄無負庫存保護** — 加數量檢查 ✅
+- [x] **盤點實際數量清空後靜默為 0** — 加 NaN 保護 ✅
+- [x] **生產完工數量清空後靜默為 0** — 加數量檢查 ✅
+- [x] **飛鵝 HTTP 請求無超時** — 加 10s timeout ✅
+- [x] **batch_cancel_orders 非事務性** — 改為任意失敗返回 Err ✅
+
+---
+
+## 🟡 P2 — 中優先級改進
+
+### 架構優化（v4.0 審計）
+
+- [x] **React Router 路由化** — 替代 activeTab 條件渲染 ✅ **v1.1.0 已實現**
+- [x] **統一類型定義** — `src/types/index.ts` ✅ **v1.1.0 已實現**
+- [ ] **Hooks 集成 App.tsx** — 使用 `useAppData` / `useAppActions` ⏳ 框架就緒
+- [ ] **loadData 局部刷新** — 每次 CRUD 觸發 21 個 invoke ⏳ 待優化
+
+### 功能完善
+
+- [ ] **低庫存閾值可配置** — 現為硬編碼 10
+- [x] **KDS 音效提示** — 新工單到達時播放提示音 ✅ **已存在**
+- [x] **KDS 工作站篩選** — 多工作站場景下按站點過濾 ✅ **已存在**
+- [x] **採購單條目成本/數量輸入驗證** — qty <= 0 和 cost < 0 均阻止 ✅
+- [ ] **採購入庫 UI 優化** — 採購單→入庫→批次生成流程
 - [ ] **訂單修改器 (Modifiers)** — POS 中加料/去料功能完善
-- [ ] **庫存預警閾值** — 可配置的最低庫存提醒
-- [ ] **數據導出** — CSV/JSON 導出報表和庫存數據
-- [ ] **打印模板預覽** — 實時預覽打印效果
+- [x] **配方明細只能添加原材料** — 新增類型切換按鈕 ✅
 
-### Performance / 性能
+### 安全監控
 
-- [ ] **前端 Bundle 優化** — 當前 >500KB，需代碼分割
-- [ ] **數據庫索引優化** — 為常用查詢添加索引
-- [ ] **大數據量分頁** — 訂單、庫存流水等列表分頁加載
-- [ ] **KDS 自動刷新** — WebSocket 或輪詢優化
-
-### UX / 用戶體驗
-
-- [ ] **暗色主題切換** — UI 主題支持
-- [ ] **鍵盤快捷鍵** — POS 快速操作、全局快捷鍵
-- [ ] **離線狀態提示** — 數據庫連接狀態可視化
-- [ ] **操作撤銷** — 刪除操作後可撤銷 (Undo)
-- [ ] **批量操作** — 批量導入原材料、批量更新價格
+- [x] **打印模板 XSS** — dangerouslySetInnerHTML 無 sanitization 🟡 監控中
+- [x] **Mutex 中毒風險** — 140 個 lock().unwrap() 🟡 監控中
 
 ---
 
-## 🟢 Low Priority / 低優先級
+## 🔵 Release Prep
 
-### Future Features / 未來功能
-
-- [ ] **微信小程序接入** — 扫码點單入口
-- [ ] **多店鋪支持** — 門店數據隔離與切換
-- [ ] **會員管理** — 顧客資料、積分、餘額
-- [ ] **優惠券系統** — 優惠活動管理 (表結構已預留)
-- [ ] **數據備份** — 自動備份 + 手動導出
-- [ ] **雲端同步** — 多設備數據同步
-- [ ] **多語言** — 中英文界面切換
-- [ ] **員工權限** — 角色權限管理
-- [ ] **營業日報** — 每日自動生成報表
-- [ ] **供應商評分** — 採購質量追蹤
-
-### DevEx / 開發體驗
-
-- [ ] **CI/CD Pipeline** — GitHub Actions 自動構建
-- [ ] **E2E 測試** — Playwright 端到端測試
-- [ ] **API 文檔** — 自動生成 Tauri Command 文檔
-- [ ] **Storybook** — UI 組件文檔
-- [ ] **Husky + lint-staged** — 提交前代碼檢查
+- [ ] **代碼簽名 (macOS)** — 配置 Apple Developer 證書
+- [ ] **代碼簽名 (Windows)** — 配置 EV 證書
+- [ ] **版本號同步** — `package.json`, `Cargo.toml`, `tauri.conf.json`
+- [x] **Rust 編譯警告清理** — 全部清零 ✅
+- [x] **TypeScript 編譯** — `tsc && vite build` ✅
 
 ---
 
-## 📊 Code Quality / 代碼質量
+## 🚫 已知不做（暫緩）
 
-### Technical Debt / 技術債務
-
-| Issue | Location | Impact |
-|-------|----------|--------|
-| Unused variables | `commands.rs`, `database.rs` | Compiler warnings |
-| Hardcoded strings | `App.tsx` handlers | Maintainability |
-| No error boundaries | React components | Crash handling |
-| No loading states | Some pages | UX |
-| Magic numbers | `database.rs` SQL | Readability |
-
-### Refactoring / 重構建議
-
-- [ ] **拆分 `App.tsx`** — 624 行過長，應按模塊拆分 state/handlers
-- [ ] **提取自定義 Hooks** — `useMaterials`, `useRecipes`, `useOrders` 等
-- [ ] **統一錯誤處理** — 創建 `Result<T, AppError>` 類型
-- [ ] **類型共享** — 前後端類型定義統一 (可能用 `ts-rs`)
-- [ ] **數據庫遷移** — 使用 `refinery` 或 `sqlx` 管理 schema 版本
+- 微信小程序接入、多店鋪、會員管理、優惠券 — 超出 v1.x 範圍
+- WebSocket KDS — 輪詢已夠用，暫不引入複雜度
+- 權限系統 — v2.x 規劃
 
 ---
 
-## 🎨 Design / 設計
+## ✅ 已完成
 
-### Icon Selection / 圖標選擇
-
-待選擇新 Logo（布穀鳥 負形 簡約風格）：
-
-- [ ] `logo-option-a.svg` — 簡約鳥形剪影
-- [ ] `logo-option-b.svg` — 負形圓形設計
-- [ ] `logo-option-c.svg` — 幾何抽象風格
-- [ ] `logo-option-d.svg` — 線條藝術風格
-
-選擇後執行：
-```bash
-# 替換 icon.svg 並重新生成所有圖標
-cp src-tauri/icons/logo-option-X.svg src-tauri/icons/icon.svg
-npm run icons:generate
-```
-
-### Screenshots / 截圖
-
-- [ ] 更新 `assets/screenshots/` 為應用實際截圖
-- [ ] 添加截圖到 README 展示
-
----
-
-## 📝 Documentation / 文檔
-
-- [ ] **CHANGELOG.md** — 版本更新日誌
-- [ ] **CONTRIBUTING.md** — 貢獻指南
-- [ ] **SECURITY.md** — 安全策略
-- [ ] **API Reference** — 完整 92+ Command 文檔
-- [ ] **Deployment Guide** — 部署指南
-- [ ] **User Manual** — 用戶手冊（中文）
-
----
-
-## ✅ Completed / 已完成
-
-- [x] 原材料管理 CRUD
+- [x] 原材料管理 CRUD + 標籤 + 分類
 - [x] 配方系統 + 成本計算
-- [x] 訂單流程 (創建→提交→預扣→KDS)
-- [x] POS 點單界面
-- [x] KDS 廚顯看板
-- [x] 庫存管理 (批次 + FIFO)
-- [x] 採購訂單
-- [x] 生產訂單
-- [x] 盤點管理
-- [x] 打印引擎 (ESC/POS + 飛鵝)
-- [x] 報表分析
+- [x] 訂單流程完整閉環
+- [x] POS 點單
+- [x] KDS 廚顯看板（15s 自動刷新 + 音效 + 工作站）
+- [x] 庫存管理批次
+- [x] 採購 / 生產 / 盤點訂單
+- [x] 打印引擎（ESC/POS + 飛鵝）
+- [x] 報表分析（5 維度）
 - [x] 通知預警系統
-- [x] 項目文檔整理
-- [x] Git 倉庫初始化
-- [x] 中英雙語 README
+- [x] Dashboard 時間篩選 + 最近訂單同步篩選
+- [x] React Router 路由化
+- [x] 統一類型定義
+- [x] Hooks 框架基礎
 
 ---
 
-<div align="center">
+## 📊 v4.0 審計統計
 
-**Total Items**: ~60 | **Completed**: 17 | **In Progress**: 6 | **Backlog**: 37
+| 嚴重度 | 數量 | 狀態 |
+|--------|------|------|
+| 🔴 P0 | 13 | ✅ 全部修復 |
+| 🟠 P1 | 28 | ✅ 全部修復 |
+| 🟡 P2 | 18 | 🔵 15 待處理 |
 
-[⬆ Back to Top](#-cuckoo-todos--開發任務清單)
+---
 
-</div>
+*審計報告: `docs/ui-ux-audit-report.md` (v4.0)*
