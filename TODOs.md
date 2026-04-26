@@ -50,8 +50,10 @@
 
 - [x] **React Router 路由化** — 替代 activeTab 條件渲染 ✅ **v1.1.0 已實現**
 - [x] **統一類型定義** — `src/types/index.ts` ✅ **v1.1.0 已實現**
-- [ ] **Hooks 集成 App.tsx** — 使用 `useAppData` / `useAppActions` ⏳ 框架就緒
-- [ ] **loadData 局部刷新** — 每次 CRUD 觸發 21 個 invoke ⏳ 待優化
+- [x] **Hooks 框架基礎** — `useAppData` / `useAppActions` ✅ **v1.1.0 已實現**
+- [x] **usePartialLoadData** — 局部刷新鉤子 ✅ **2026-04-26 新增**
+- [x] **useAppContext** — Context + 便捷鉤子 ✅ **2026-04-26 新增**
+- [ ] **Hooks 集成到 App.tsx** — 使用新鉤子重構 ⏳ 待重構
 
 ### 功能完善
 
@@ -62,6 +64,8 @@
 - [ ] **採購入庫 UI 優化** — 採購單→入庫→批次生成流程
 - [ ] **訂單修改器 (Modifiers)** — POS 中加料/去料功能完善
 - [x] **配方明細只能添加原材料** — 新增類型切換按鈕 ✅
+- [x] **數據庫索引** — 已完善（24 個索引）✅
+- [x] **React Router** — 啟用 code splitting ✅
 
 ### 安全監控
 
