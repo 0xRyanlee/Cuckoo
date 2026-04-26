@@ -259,3 +259,33 @@ export interface StocktakeWithItems {
   stocktake: Stocktake;
   items: StocktakeItem[];
 }
+export interface PrintTicketType {
+  id: number;
+  code: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  show_price: boolean;
+  show_seq: boolean;
+  show_note_field: boolean;
+  station_id: number | null;
+  paper_width: string;
+  font_size: string;
+  cut_mode: string;
+  print_speed: string;
+  print_density: string;
+  show_order_no: boolean;
+  show_table_no: boolean;
+  show_dine_type: boolean;
+  show_item_name: boolean;
+  show_item_qty: boolean;
+  show_item_price: boolean;
+  show_item_subtotal: boolean;
+  show_item_spec: boolean;
+  show_item_note: boolean;
+  show_created_at: boolean;
+  show_total_amount: boolean;
+  created_at: string;
+  updated_at: string;
+}

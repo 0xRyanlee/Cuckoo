@@ -178,6 +178,14 @@ pub fn run() {
             commands::set_default_template,
             commands::render_template_preview,
             commands::render_template_content_preview,
+            // 票據類型
+            commands::get_print_ticket_types,
+            commands::get_print_ticket_type,
+            commands::create_print_ticket_type,
+            commands::update_print_ticket_type,
+            commands::delete_print_ticket_type,
+            commands::set_default_ticket_type,
+            commands::ensure_default_ticket_types,
             // 通知系统
             commands::get_notifications,
             commands::get_unread_notification_count,

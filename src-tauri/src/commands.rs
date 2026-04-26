@@ -1180,11 +1180,46 @@ pub fn get_station_menu_items(state: State<AppState>, station_id: i64) -> Result
 
 // ==================== 打印模板命令 ====================
 
-use crate::database::{PrintTemplate, PrintPreviewResult, CreatePrintTemplateRequest};
+use crate::database::{PrintTemplate, PrintPreviewResult, CreatePrintTemplateRequest, PrintTicketType, CreatePrintTicketTypeRequest, UpdatePrintTicketTypeRequest};
 
 #[tauri::command]
 pub fn get_print_templates(state: State<AppState>, template_type: Option<String>) -> Result<Vec<PrintTemplate>, String> {
     state.db.get_print_templates(template_type.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_print_ticket_types(state: State<AppState>) -> Result<Vec<PrintTicketType>, String> {
+    state.db.get_print_ticket_types().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_print_ticket_type(state: State<AppState>, id: i64) -> Result<PrintTicketType, String> {
+    state.db.get_print_ticket_type(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_print_ticket_type(state: State<AppState>, req: CreatePrintTicketTypeRequest) -> Result<i64, String> {
+    state.db.create_print_ticket_type(&req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_print_ticket_type(state: State<AppState>, id: i64, req: UpdatePrintTicketTypeRequest) -> Result<(), String> {
+    state.db.update_print_ticket_type(id, &req).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_print_ticket_type(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_print_ticket_type(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_default_ticket_type(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.set_default_ticket_type(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn ensure_default_ticket_types(state: State<AppState>) -> Result<(), String> {
+    state.db.ensure_default_ticket_types().map_err(|e| e.to_string())
 }
 
 #[tauri::command]

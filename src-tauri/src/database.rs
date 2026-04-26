@@ -420,6 +420,38 @@ pub struct PrintTemplate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrintTicketType {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub is_default: bool,
+    pub show_price: bool,
+    pub show_seq: bool,
+    pub show_note_field: bool,
+    pub station_id: Option<i64>,
+    pub paper_width: String,
+    pub font_size: String,
+    pub cut_mode: String,
+    pub print_speed: String,
+    pub print_density: String,
+    pub show_order_no: bool,
+    pub show_table_no: bool,
+    pub show_dine_type: bool,
+    pub show_item_name: bool,
+    pub show_item_qty: bool,
+    pub show_item_price: bool,
+    pub show_item_subtotal: bool,
+    pub show_item_spec: bool,
+    pub show_item_note: bool,
+    pub show_created_at: bool,
+    pub show_total_amount: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePrintTemplateRequest {
     pub name: String,
     pub template_type: String,
@@ -436,6 +468,64 @@ pub struct CreatePrintTemplateRequest {
     pub show_service_charge: Option<bool>,
     pub item_sort: Option<String>,
     pub modifiers_color: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePrintTicketTypeRequest {
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub is_default: bool,
+    pub show_price: bool,
+    pub show_seq: bool,
+    pub show_note_field: bool,
+    pub station_id: Option<i64>,
+    pub paper_width: String,
+    pub font_size: String,
+    pub cut_mode: String,
+    pub print_speed: String,
+    pub print_density: String,
+    pub show_order_no: bool,
+    pub show_table_no: bool,
+    pub show_dine_type: bool,
+    pub show_item_name: bool,
+    pub show_item_qty: bool,
+    pub show_item_price: bool,
+    pub show_item_subtotal: bool,
+    pub show_item_spec: bool,
+    pub show_item_note: bool,
+    pub show_created_at: bool,
+    pub show_total_amount: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePrintTicketTypeRequest {
+    pub name: String,
+    pub code: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub is_default: bool,
+    pub show_price: bool,
+    pub show_seq: bool,
+    pub show_note_field: bool,
+    pub station_id: Option<i64>,
+    pub paper_width: String,
+    pub font_size: String,
+    pub cut_mode: String,
+    pub print_speed: String,
+    pub print_density: String,
+    pub show_order_no: bool,
+    pub show_table_no: bool,
+    pub show_dine_type: bool,
+    pub show_item_name: bool,
+    pub show_item_qty: bool,
+    pub show_item_price: bool,
+    pub show_item_subtotal: bool,
+    pub show_item_spec: bool,
+    pub show_item_note: bool,
+    pub show_created_at: bool,
+    pub show_total_amount: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1073,6 +1163,37 @@ impl Database {
                 show_service_charge INTEGER DEFAULT 1,
                 item_sort TEXT DEFAULT 'entry',
                 modifiers_color TEXT DEFAULT 'red',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS print_ticket_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                description TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                show_price INTEGER NOT NULL DEFAULT 0,
+                show_seq INTEGER NOT NULL DEFAULT 1,
+                show_note_field INTEGER NOT NULL DEFAULT 1,
+                station_id INTEGER,
+                paper_width TEXT NOT NULL DEFAULT '58mm',
+                font_size TEXT NOT NULL DEFAULT 'medium',
+                cut_mode TEXT NOT NULL DEFAULT 'full',
+                print_speed TEXT NOT NULL DEFAULT 'medium',
+                print_density TEXT NOT NULL DEFAULT 'medium',
+                show_order_no INTEGER NOT NULL DEFAULT 1,
+                show_table_no INTEGER NOT NULL DEFAULT 1,
+                show_dine_type INTEGER NOT NULL DEFAULT 1,
+                show_item_name INTEGER NOT NULL DEFAULT 1,
+                show_item_qty INTEGER NOT NULL DEFAULT 1,
+                show_item_price INTEGER NOT NULL DEFAULT 0,
+                show_item_subtotal INTEGER NOT NULL DEFAULT 0,
+                show_item_spec INTEGER NOT NULL DEFAULT 1,
+                show_item_note INTEGER NOT NULL DEFAULT 1,
+                show_created_at INTEGER NOT NULL DEFAULT 1,
+                show_total_amount INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -3036,6 +3157,148 @@ Ok(())
         let conn = self.conn.lock().unwrap();
         conn.execute("UPDATE print_templates SET is_default = 0 WHERE template_type = ?1", params![template_type])?;
         conn.execute("UPDATE print_templates SET is_default = 1 WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // ==================== 票據類型 ====================
+
+    pub fn get_print_ticket_types(&self) -> Result<Vec<PrintTicketType>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id, code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount, created_at, updated_at FROM print_ticket_types ORDER BY is_default DESC, name")?;
+        let types: Vec<PrintTicketType> = stmt.query_map([], |row| {
+            Ok(PrintTicketType {
+                id: row.get(0)?,
+                code: row.get(1)?,
+                name: row.get(2)?,
+                description: row.get(3)?,
+                is_active: { let v: i64 = row.get(4)?; v == 1 },
+                is_default: { let v: i64 = row.get(5)?; v == 1 },
+                show_price: { let v: i64 = row.get(6)?; v == 1 },
+                show_seq: { let v: i64 = row.get(7)?; v == 1 },
+                show_note_field: { let v: i64 = row.get(8)?; v == 1 },
+                station_id: row.get(9)?,
+                paper_width: row.get(10)?,
+                font_size: row.get(11)?,
+                cut_mode: row.get(12)?,
+                print_speed: row.get(13)?,
+                print_density: row.get(14)?,
+                show_order_no: { let v: i64 = row.get(15)?; v == 1 },
+                show_table_no: { let v: i64 = row.get(16)?; v == 1 },
+                show_dine_type: { let v: i64 = row.get(17)?; v == 1 },
+                show_item_name: { let v: i64 = row.get(18)?; v == 1 },
+                show_item_qty: { let v: i64 = row.get(19)?; v == 1 },
+                show_item_price: { let v: i64 = row.get(20)?; v == 1 },
+                show_item_subtotal: { let v: i64 = row.get(21)?; v == 1 },
+                show_item_spec: { let v: i64 = row.get(22)?; v == 1 },
+                show_item_note: { let v: i64 = row.get(23)?; v == 1 },
+                show_created_at: { let v: i64 = row.get(24)?; v == 1 },
+                show_total_amount: { let v: i64 = row.get(25)?; v == 1 },
+                created_at: row.get(26)?,
+                updated_at: row.get(27)?,
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+        Ok(types)
+    }
+
+    pub fn get_print_ticket_type(&self, id: i64) -> Result<PrintTicketType> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("SELECT id, code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount, created_at, updated_at FROM print_ticket_types WHERE id = ?1", params![id], |row| {
+            Ok(PrintTicketType {
+                id: row.get(0)?,
+                code: row.get(1)?,
+                name: row.get(2)?,
+                description: row.get(3)?,
+                is_active: { let v: i64 = row.get(4)?; v == 1 },
+                is_default: { let v: i64 = row.get(5)?; v == 1 },
+                show_price: { let v: i64 = row.get(6)?; v == 1 },
+                show_seq: { let v: i64 = row.get(7)?; v == 1 },
+                show_note_field: { let v: i64 = row.get(8)?; v == 1 },
+                station_id: row.get(9)?,
+                paper_width: row.get(10)?,
+                font_size: row.get(11)?,
+                cut_mode: row.get(12)?,
+                print_speed: row.get(13)?,
+                print_density: row.get(14)?,
+                show_order_no: { let v: i64 = row.get(15)?; v == 1 },
+                show_table_no: { let v: i64 = row.get(16)?; v == 1 },
+                show_dine_type: { let v: i64 = row.get(17)?; v == 1 },
+                show_item_name: { let v: i64 = row.get(18)?; v == 1 },
+                show_item_qty: { let v: i64 = row.get(19)?; v == 1 },
+                show_item_price: { let v: i64 = row.get(20)?; v == 1 },
+                show_item_subtotal: { let v: i64 = row.get(21)?; v == 1 },
+                show_item_spec: { let v: i64 = row.get(22)?; v == 1 },
+                show_item_note: { let v: i64 = row.get(23)?; v == 1 },
+                show_created_at: { let v: i64 = row.get(24)?; v == 1 },
+                show_total_amount: { let v: i64 = row.get(25)?; v == 1 },
+                created_at: row.get(26)?,
+                updated_at: row.get(27)?,
+            })
+        })
+    }
+
+    pub fn create_print_ticket_type(&self, req: &CreatePrintTicketTypeRequest) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO print_ticket_types (code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+            params![
+                req.code, req.name, req.description, req.is_active as i64, req.is_default as i64,
+                req.show_price as i64, req.show_seq as i64, req.show_note_field as i64, req.station_id,
+                req.paper_width, req.font_size, req.cut_mode, req.print_speed, req.print_density,
+                req.show_order_no as i64, req.show_table_no as i64, req.show_dine_type as i64,
+                req.show_item_name as i64, req.show_item_qty as i64, req.show_item_price as i64,
+                req.show_item_subtotal as i64, req.show_item_spec as i64, req.show_item_note as i64,
+                req.show_created_at as i64, req.show_total_amount as i64
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn update_print_ticket_type(&self, id: i64, req: &UpdatePrintTicketTypeRequest) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE print_ticket_types SET code = ?1, name = ?2, description = ?3, is_active = ?4, is_default = ?5, show_price = ?6, show_seq = ?7, show_note_field = ?8, station_id = ?9, paper_width = ?10, font_size = ?11, cut_mode = ?12, print_speed = ?13, print_density = ?14, show_order_no = ?15, show_table_no = ?16, show_dine_type = ?17, show_item_name = ?18, show_item_qty = ?19, show_item_price = ?20, show_item_subtotal = ?21, show_item_spec = ?22, show_item_note = ?23, show_created_at = ?24, show_total_amount = ?25, updated_at = datetime('now') WHERE id = ?26",
+            params![
+                req.code, req.name, req.description, req.is_active as i64, req.is_default as i64, req.show_price as i64, req.show_seq as i64,
+                req.show_note_field as i64, req.station_id, req.paper_width, req.font_size, req.cut_mode,
+                req.print_speed, req.print_density, req.show_order_no as i64, req.show_table_no as i64,
+                req.show_dine_type as i64, req.show_item_name as i64, req.show_item_qty as i64,
+                req.show_item_price as i64, req.show_item_subtotal as i64, req.show_item_spec as i64,
+                req.show_item_note as i64, req.show_created_at as i64, req.show_total_amount as i64, id
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_print_ticket_type(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM print_ticket_types WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn set_default_ticket_type(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE print_ticket_types SET is_default = 0", [])?;
+        conn.execute("UPDATE print_ticket_types SET is_default = 1 WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn ensure_default_ticket_types(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM print_ticket_types", [], |row| row.get(0))?;
+        if count == 0 {
+            conn.execute(
+                "INSERT INTO print_ticket_types (code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount) VALUES ('kitchen', '廚房單', '後廚備餐用', 1, 1, 0, 1, 1, NULL, '58mm', 'medium', 'full', 'medium', 'medium', 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 0)",
+                [],
+            )?;
+            conn.execute(
+                "INSERT INTO print_ticket_types (code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount) VALUES ('receipt', '出餐單', '客人結帳用', 1, 0, 1, 0, 1, NULL, '58mm', 'medium', 'full', 'medium', 'medium', 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1)",
+                [],
+            )?;
+            conn.execute(
+                "INSERT INTO print_ticket_types (code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount) VALUES ('label', '批次標籤', '庫存標識用', 1, 0, 0, 0, 0, NULL, '50mm', 'small', 'full', 'medium', 'medium', 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0)",
+                [],
+            )?;
+        }
         Ok(())
     }
 

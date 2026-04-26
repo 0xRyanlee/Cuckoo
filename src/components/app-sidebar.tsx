@@ -51,6 +51,7 @@ const navGroups = [
     label: "系统",
     items: [
       { id: "attributes", label: "属性模板", icon: SlidersHorizontal },
+      { id: "print-tickets", label: "票据类型", icon: Printer },
       { id: "print-templates", label: "打印模板", icon: Printer },
       { id: "print-preview", label: "打印预览", icon: Printer },
       { id: "reports", label: "数据报表", icon: BarChart3 },
