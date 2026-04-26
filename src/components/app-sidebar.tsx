@@ -70,7 +70,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-border">
-      <SidebarHeader className="h-14 border-b border-border px-4">
+      <SidebarHeader className="h-14 border-b border-border px-4 pl-12 md:pl-4">
         <div className="flex items-center gap-3">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <span className="text-xs font-bold">C</span>
