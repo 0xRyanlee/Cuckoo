@@ -120,8 +120,8 @@ function App() {
     catch (e) { toast.error("创建材料失败", { description: String(e) }); }
   }
 
-  async function handleUpdateMaterial(id: number, data: { name?: string; category_id?: number | null }) {
-    try { await invoke("update_material", { id, name: data.name || null, categoryId: data.category_id, shelfLifeDays: null }); toast.success("材料已更新"); loadData(); }
+  async function handleUpdateMaterial(id: number, data: { name?: string; category_id?: number | null; min_qty?: number }) {
+    try { await invoke("update_material", { id, name: data.name || null, categoryId: data.category_id, shelfLifeDays: null, minQty: data.min_qty ?? null }); toast.success("材料已更新"); loadData(); }
     catch (e) { toast.error("更新材料失败", { description: String(e) }); }
   }
 

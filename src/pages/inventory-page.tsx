@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -8,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Plus, Package, ArrowUpDown, Trash2, ArrowRightLeft } from "lucide-react";
+import { AlertTriangle, Plus, Package, ArrowUpDown, Trash2, ArrowRightLeft, Settings } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { toast } from "sonner";
 
 interface Material {
   id: number;
@@ -93,13 +95,33 @@ export function InventoryPage({
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [wastageDialogOpen, setWastageDialogOpen] = useState(false);
+  const [thresholdDialogOpen, setThresholdDialogOpen] = useState(false);
   const [batchForm, setBatchForm] = useState({ material_id: "", lot_no: "", quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "" });
   const [adjustForm, setAdjustForm] = useState({ lot_id: 0, qty_delta: "", reason: "" });
   const [wastageForm, setWastageForm] = useState({ lot_id: 0, qty: "", wastage_type: "normal" });
+  const [thresholdForm, setThresholdForm] = useState({ material_id: 0, min_qty: "10" });
 
   const minQtyMap = Object.fromEntries(materials.map((m) => [m.id, m.min_qty ?? 10]));
   const getMinQty = (materialId: number) => minQtyMap[materialId] ?? 10;
   const lowStockItems = filteredSummary.filter((s) => s.available_qty < getMinQty(s.material_id));
+
+  async function saveThreshold() {
+    try {
+      const qty = parseInt(thresholdForm.min_qty);
+      if (isNaN(qty)) throw new Error("Invalid quantity");
+      await invoke("update_material", {
+        id: thresholdForm.material_id,
+        name: null,
+        categoryId: null,
+        shelfLifeDays: null,
+        minQty: qty,
+      });
+      setThresholdDialogOpen(false);
+      toast.success("閾值已保存");
+    } catch (e) {
+      toast.error("保存失敗", { description: String(e) });
+    }
+  }
 
   const getTxnTypeBadge = (type: string) => {
     switch (type) {
@@ -172,11 +194,16 @@ export function InventoryPage({
         </div>
       </div>
 
-      {lowStockItems.length > 0 && (
+{lowStockItems.length > 0 && (
         <Card className="border-destructive/50">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" />库存预警 ({lowStockItems.length})
+            <CardTitle className="flex items-center justify-between text-destructive">
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />庫存預警 ({lowStockItems.length})
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setThresholdDialogOpen(true)}>
+                <Settings className="h-4 w-4 mr-2" />配置閾值
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -432,9 +459,40 @@ export function InventoryPage({
               </Select>
             </div>
           </div>
-          <DialogFooter>
+<DialogFooter>
             <Button variant="outline" onClick={() => setWastageDialogOpen(false)}>取消</Button>
-            <Button variant="destructive" onClick={handleWastage}>确认损耗</Button>
+            <Button variant="destructive" onClick={handleWastage}>確認損耗</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={thresholdDialogOpen} onOpenChange={setThresholdDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>設置低庫存閾值</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="threshold-material">材料</Label>
+              <Select value={String(thresholdForm.material_id)} onValueChange={(v) => {
+                const m = materials.find(m => m.id === Number(v));
+                setThresholdForm({ material_id: Number(v), min_qty: m?.min_qty?.toString() || "10" });
+              }}>
+                <SelectTrigger><SelectValue placeholder="選擇材料" /></SelectTrigger>
+                <SelectContent>
+                  {materials.map(m => (
+                    <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="threshold-value">閾值數量</Label>
+              <Input id="threshold-value" type="number" value={thresholdForm.min_qty} onChange={(e) => setThresholdForm({ ...thresholdForm, min_qty: e.target.value })} placeholder="10" />
+              <p className="text-xs text-muted-foreground">當庫存低於此數量時顯示預警</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setThresholdDialogOpen(false)}>取消</Button>
+            <Button onClick={saveThreshold}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
