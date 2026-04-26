@@ -286,6 +286,10 @@ export interface PrintTicketType {
   show_item_note: boolean;
   show_created_at: boolean;
   show_total_amount: boolean;
+  show_lot_no: boolean;
+  show_qty_info: boolean;
+  show_expiry_date: boolean;
+  show_supplier: boolean;
   created_at: string;
   updated_at: string;
 }

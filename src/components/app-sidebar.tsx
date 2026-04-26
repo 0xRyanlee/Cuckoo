@@ -47,15 +47,13 @@ const navGroups = [
       { id: "material-states", label: "材料状态", icon: Layers },
     ],
   },
-  {
-    label: "系统",
+{
+    label: "系統",
     items: [
-      { id: "attributes", label: "属性模板", icon: SlidersHorizontal },
-      { id: "print-tickets", label: "票据类型", icon: Printer },
-      { id: "print-templates", label: "打印模板", icon: Printer },
-      { id: "print-preview", label: "打印预览", icon: Printer },
-      { id: "reports", label: "数据报表", icon: BarChart3 },
-      { id: "settings", label: "设置", icon: Settings },
+      { id: "attributes", label: "屬性模板", icon: SlidersHorizontal },
+      { id: "print-templates", label: "打印中心", icon: Printer },
+      { id: "reports", label: "數據報表", icon: BarChart3 },
+      { id: "settings", label: "設置", icon: Settings },
     ],
   },
 ];

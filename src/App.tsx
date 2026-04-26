@@ -21,10 +21,11 @@ import { PurchaseOrdersPage } from "@/pages/purchase-orders-page";
 import { ProductionOrdersPage } from "@/pages/production-orders-page";
 import { StocktakesPage } from "@/pages/stocktakes-page";
 import { ReportsPage } from "@/pages/reports-page";
-import { PrintTemplatesPage } from "@/pages/print-templates-page";
+import { PrintCenterPage } from "@/pages/print-center-page";
+// import { PrintTemplatesPage } from "@/pages/print-templates-page";
 import { PrintSettingsPage } from "@/pages/print-settings-page";
-import { PrintPreviewPage } from "@/pages/print-preview-page";
-import { PrintTicketsPage } from "@/pages/print-tickets-page";
+// import { PrintPreviewPage } from "@/pages/print-preview-page";
+// import { PrintTicketsPage } from "@/pages/print-tickets-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -572,10 +573,8 @@ function App() {
                 <Route path="/production-orders" element={<ProductionOrdersPage orders={productionOrders} recipes={recipes} onCreateOrder={handleCreateProductionOrder} onStartOrder={handleStartProductionOrder} onCompleteOrder={handleCompleteProductionOrder} onViewOrder={handleViewProductionOrder} onDeleteOrder={handleDeleteProductionOrder} selectedOrder={selectedProductionOrder} searchQuery={searchQuery} />} />
                 <Route path="/stocktakes" element={<StocktakesPage stocktakes={stocktakes} onCreateStocktake={handleCreateStocktake} onUpdateItem={handleUpdateStocktakeItem} onCompleteStocktake={handleCompleteStocktake} onViewStocktake={handleViewStocktake} onDeleteStocktake={handleDeleteStocktake} selectedStocktake={selectedStocktake} searchQuery={searchQuery} />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/print-templates" element={<PrintTemplatesPage />} />
+                <Route path="/print-templates" element={<PrintCenterPage />} />
                 <Route path="/print-settings" element={<PrintSettingsPage />} />
-                <Route path="/print-preview" element={<PrintPreviewPage />} />
-                <Route path="/print-tickets" element={<PrintTicketsPage />} />
                 <Route path="*" element={<DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />} />
               </Routes>
             </main>

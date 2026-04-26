@@ -1,0 +1,57 @@
+# CodeRabbit 配置 - Cuckoo 項目
+# 審查嚴格程度: assertive (嚴格)
+
+version: "0.1"
+review:
+  profile: "assertive"
+  high_level_summary: true
+  auto_title-placeholder: ""
+  review_status: "approved"
+  collapse_walkthrough: false
+  
+categories:
+  security:
+    walkthrough:
+      enabled: true
+  logic:
+    walkthrough:
+      enabled: true
+  performance:
+    walkthrough:
+      enabled: false
+  style:
+    walkthrough:
+      enabled: false
+
+markdown:
+  sections:
+    - walkthrough
+    - summary
+    - changes
+    
+chat:
+  auto_reply: false
+
+knowledge_base:
+  learning:
+    enabled: true
+    storage: ./docs/coderabbit-learnings.md
+  code_guidelines:
+    enabled: true
+    file_patterns:
+      - "**/AGENTS.md"
+      - "**/CLAUDE.md"
+
+path_instructions:
+  - path: "src"
+    instructions: |
+      這是 Cuckoo 餐飲管理系統的前端代碼。
+      - 使用 React + TypeScript + Tailwind CSS
+      - 遵循 React 最佳實踐
+      - 優先使用 Shadcn UI 組件
+  - path: "src-tauri"
+    instructions: |
+      這是 Cuckoo 的 Rust 後端代碼。
+      - 使用 Tauri 2.0
+      - 遵循 Rust 慣例 (snake_case, 避免 clone)
+      - 使用 rusqlite 數據庫
