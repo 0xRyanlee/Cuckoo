@@ -10,7 +10,6 @@ import { MaterialsPage } from "@/pages/materials-page";
 import { RecipesPage } from "@/pages/recipes-page";
 import { InventoryPage } from "@/pages/inventory-page";
 import { MenuPage } from "@/pages/menu-page";
-import { OrdersPage } from "@/pages/orders-page";
 import { POSPage } from "@/pages/pos-page";
 import { SuppliersPage } from "@/pages/suppliers-page";
 import { KDSPage } from "@/pages/kds-page";
@@ -21,21 +20,18 @@ import { PurchaseOrdersPage } from "@/pages/purchase-orders-page";
 import { ProductionOrdersPage } from "@/pages/production-orders-page";
 import { StocktakesPage } from "@/pages/stocktakes-page";
 import { ReportsPage } from "@/pages/reports-page";
+import { OrdersPage } from "@/pages/orders-page";
 import { PrintCenterPage } from "@/pages/print-center-page";
-// import { PrintTemplatesPage } from "@/pages/print-templates-page";
 import { PrintSettingsPage } from "@/pages/print-settings-page";
-// import { PrintPreviewPage } from "@/pages/print-preview-page";
-// import { PrintTicketsPage } from "@/pages/print-tickets-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { toast } from "sonner";
+import { useAppData } from "@/hooks/useAppData";
 import type {
-  Unit, MaterialCategory, TagItem, Material, Recipe,
-  RecipeWithItems, RecipeCostResult, MenuItem, MenuCategory, OrderItemModifier,
-  Order, OrderWithItems, MenuItemSpec, POSCartItem, KitchenStation, TicketWithItems,
-  InventoryBatch, InventorySummary, AttributeTemplate, InventoryTxn, Supplier, MaterialState,
-  PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems
+  Recipe, RecipeWithItems, RecipeCostResult, OrderItemModifier,
+  Order, OrderWithItems, MenuItemSpec, POSCartItem, TicketWithItems,
+  PurchaseOrderWithItems, ProductionOrderWithItems, StocktakeWithItems
 } from "./types";
 
 // ==================== App ====================
@@ -44,76 +40,36 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const activeTab = location.pathname.slice(1) || "dashboard";
-  const [loading, setLoading] = useState(true);
-  const [connected, setConnected] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [categories, setCategories] = useState<MaterialCategory[]>([]);
-  const [tags, setTags] = useState<TagItem[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [selectedRecipe, setSelectedRecipe] = useState<RecipeWithItems | null>(null);
-  const [recipeCost, setRecipeCost] = useState<RecipeCostResult | null>(null);
-  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ordersHasMore, setOrdersHasMore] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
-  const [stations, setStations] = useState<KitchenStation[]>([]);
-  const [kdsTickets, setKdsTickets] = useState<TicketWithItems[]>([]);
-  const [inventoryBatches, setInventoryBatches] = useState<InventoryBatch[]>([]);
-  const [inventorySummary, setInventorySummary] = useState<InventorySummary[]>([]);
-  const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
-  const [attributeTemplates, setAttributeTemplates] = useState<AttributeTemplate[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [materialStates, setMaterialStates] = useState<MaterialState[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [selectedPurchaseOrder, setSelectedPurchaseOrder] = useState<PurchaseOrderWithItems | null>(null);
-  const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
-  const [selectedProductionOrder, setSelectedProductionOrder] = useState<ProductionOrderWithItems | null>(null);
-  const [stocktakes, setStocktakes] = useState<Stocktake[]>([]);
-  const [selectedStocktake, setSelectedStocktake] = useState<StocktakeWithItems | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void } | null>(null);
 
-  useEffect(() => { loadData(); }, []);
+  const {
+    loading, connected,
+    units,
+    categories,
+    tags,
+    materials,
+    recipes, selectedRecipe, setSelectedRecipe,
+    recipeCost, setRecipeCost,
+    menuCategories,
+    menuItems,
+    orders, ordersHasMore, setOrders, setOrdersHasMore,
+    selectedOrder, setSelectedOrder,
+    stations,
+    kdsTickets, setKdsTickets,
+    inventoryBatches,
+    inventorySummary,
+    inventoryTxns,
+    attributeTemplates,
+    suppliers,
+    materialStates,
+    purchaseOrders, selectedPurchaseOrder, setSelectedPurchaseOrder,
+    productionOrders, selectedProductionOrder, setSelectedProductionOrder,
+    stocktakes, selectedStocktake, setSelectedStocktake,
+    loadData,
+  } = useAppData();
 
-  async function loadData() {
-    try {
-      setLoading(true);
-      const result = await invoke<string>("health_check");
-      setConnected(result === "ok");
-      try { await invoke("check_and_create_alerts"); } catch { /* ignore alert check errors */ }
-      setUnits(await invoke<Unit[]>("get_units"));
-      setCategories(await invoke<MaterialCategory[]>("get_material_categories"));
-      setTags(await invoke<TagItem[]>("get_tags"));
-      setMaterials(await invoke<Material[]>("get_materials"));
-      setRecipes(await invoke<Recipe[]>("get_recipes"));
-      setMenuCategories(await invoke<MenuCategory[]>("get_menu_categories"));
-      setMenuItems(await invoke<MenuItem[]>("get_menu_items"));
-      const fetchedOrders = await invoke<Order[]>("get_orders", { limit: 200, offset: 0 });
-      setOrders(fetchedOrders);
-      setOrdersHasMore(fetchedOrders.length === 200);
-      setStations(await invoke<KitchenStation[]>("get_kitchen_stations"));
-      setInventoryBatches(await invoke<InventoryBatch[]>("get_inventory_batches"));
-      setInventorySummary(await invoke<InventorySummary[]>("get_inventory_summary"));
-      setInventoryTxns(await invoke<InventoryTxn[]>("get_inventory_txns", { limit: 50 }));
-      setAttributeTemplates(await invoke<AttributeTemplate[]>("get_attribute_templates"));
-      setSuppliers(await invoke<Supplier[]>("get_suppliers"));
-      setMaterialStates(await invoke<MaterialState[]>("get_all_material_states"));
-      setPurchaseOrders(await invoke<PurchaseOrder[]>("get_purchase_orders"));
-      setProductionOrders(await invoke<ProductionOrder[]>("get_production_orders"));
-      setStocktakes(await invoke<Stocktake[]>("get_stocktakes"));
-      const pendingTickets = await invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "pending" });
-      const startedTickets = await invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "started" });
-      setKdsTickets([...pendingTickets, ...startedTickets]);
-    } catch (e) {
-      toast.error("连接失败", { description: String(e) });
-      setConnected(false);
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => { loadData(); }, []);
 
   async function handleCreateMaterial(data: { code: string; name: string; base_unit_id: number; category_id: number | null; tag_ids: number[] }) {
     try { await invoke("create_material", { req: { code: data.code, name: data.name, base_unit_id: data.base_unit_id, category_id: data.category_id, shelf_life_days: null, tag_ids: data.tag_ids } }); toast.success("材料已创建", { description: data.name }); loadData(); }
