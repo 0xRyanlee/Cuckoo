@@ -39,11 +39,21 @@ interface MenuItemSpec {
   qty_multiplier: number;
 }
 
+interface CartModifier {
+  id?: number;
+  modifier_type: string;
+  material_id?: number;
+  material_name?: string;
+  qty: number;
+  price_delta: number;
+}
+
 interface CartItem {
   menu_item: MenuItem;
   spec: MenuItemSpec | null;
   qty: number;
   note: string;
+  modifiers: CartModifier[];
 }
 
 interface POSPageProps {
@@ -69,12 +79,23 @@ export function POSPage({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [specDialogOpen, setSpecDialogOpen] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [modifierDialogOpen, setModifierDialogOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState<MenuItem | null>(null);
   const [currentCartItemIndex, setCurrentCartItemIndex] = useState<number | null>(null);
   const [specs, setSpecs] = useState<MenuItemSpec[]>([]);
   const [selectedSpec, setSelectedSpec] = useState<MenuItemSpec | null>(null);
   const [tempNote, setTempNote] = useState("");
   const [dineType, setDineType] = useState("dine_in");
+
+  const presetModifiers = [
+    { modifier_type: "加料", price_delta: 2, qty: 1 },
+    { modifier_type: "加料", price_delta: 5, qty: 1 },
+    { modifier_type: "加料", price_delta: 10, qty: 1 },
+    { modifier_type: "去料", price_delta: -2, qty: 1 },
+    { modifier_type: "少糖", price_delta: 0, qty: 1 },
+    { modifier_type: "少冰", price_delta: 0, qty: 1 },
+    { modifier_type: "去冰", price_delta: 0, qty: 1 },
+  ];
   const [tableNo, setTableNo] = useState("");
 
   useEffect(() => {
@@ -115,10 +136,11 @@ export function POSPage({
     return matchesCategory && matchesSearch;
   });
 
-  const cartTotal = cart.reduce(
-    (sum, item) => sum + (item.menu_item.sales_price + (item.spec?.price_delta || 0)) * item.qty,
-    0
-  );
+  const cartTotal = cart.reduce((sum, item) => {
+    const itemTotal = (item.menu_item.sales_price + (item.spec?.price_delta || 0)) * item.qty;
+    const modifierTotal = item.modifiers.reduce((m, mod) => m + mod.price_delta * mod.qty, 0);
+    return sum + itemTotal + modifierTotal;
+  }, 0);
 
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
@@ -132,7 +154,7 @@ export function POSPage({
       newCart[existingIndex].qty += qty;
       setCart(newCart);
     } else {
-      setCart([...cart, { menu_item: item, spec, qty, note: "" }]);
+      setCart([...cart, { menu_item: item, spec, qty, note: "", modifiers: [] }]);
     }
   }
 
@@ -187,8 +209,29 @@ export function POSPage({
     setNoteDialogOpen(false);
   }
 
+  function openModifierDialog(index: number) {
+    setCurrentCartItemIndex(index);
+    setModifierDialogOpen(true);
+  }
+
+  function addModifier(modifier: CartModifier) {
+    if (currentCartItemIndex !== null) {
+      const newCart = [...cart];
+      newCart[currentCartItemIndex].modifiers.push(modifier);
+      setCart(newCart);
+    }
+  }
+
+  function removeModifier(itemIndex: number, modIndex: number) {
+    const newCart = [...cart];
+    newCart[itemIndex].modifiers.splice(modIndex, 1);
+    setCart(newCart);
+  }
+
   function getItemPrice(item: CartItem) {
-    return item.menu_item.sales_price + (item.spec?.price_delta || 0);
+    const basePrice = item.menu_item.sales_price + (item.spec?.price_delta || 0);
+    const modifierPrice = item.modifiers.reduce((sum, m) => sum + m.price_delta * m.qty, 0);
+    return basePrice + modifierPrice;
   }
 
   return (
@@ -315,6 +358,16 @@ export function POSPage({
                           <span className="text-xs text-muted-foreground truncate">{item.note}</span>
                         </div>
                       )}
+                      {item.modifiers.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {item.modifiers.map((mod, mi) => (
+                            <Badge key={mi} variant="outline" className="text-[10px] py-0 h-5">
+                              {mod.modifier_type}
+                              {mod.price_delta !== 0 && ` (${mod.price_delta > 0 ? "+" : ""}${mod.price_delta})`}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <Button
                       variant="ghost"
@@ -356,6 +409,14 @@ export function POSPage({
                         onClick={() => openNoteDialog(index)}
                       >
                         <MessageSquare className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground"
+                        onClick={() => openModifierDialog(index)}
+                      >
+                        <Tag className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -478,6 +539,81 @@ export function POSPage({
               取消
             </Button>
             <Button onClick={confirmNote}>确认</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modifierDialogOpen} onOpenChange={setModifierDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>加料 / 去料</DialogTitle>
+          </DialogHeader>
+          {currentCartItemIndex !== null && (
+            <div className="py-4">
+              {cart[currentCartItemIndex].modifiers.length > 0 && (
+                <div className="mb-4">
+                  <Label className="mb-2 block">已添加:</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {cart[currentCartItemIndex].modifiers.map((mod, idx) => (
+                      <Badge key={idx} variant="secondary" className="flex items-center gap-1">
+                        {mod.modifier_type}
+                        {mod.price_delta !== 0 && ` (${mod.price_delta > 0 ? "+" : ""}${mod.price_delta})`}
+                        <button onClick={() => removeModifier(currentCartItemIndex, idx)} className="ml-1 hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <Label className="mb-2 block">快速添加:</Label>
+              <div className="flex flex-wrap gap-2">
+                {presetModifiers.map((mod, idx) => (
+                  <Button
+                    key={idx}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addModifier({ ...mod })}
+                  >
+                    {mod.modifier_type}
+                    {mod.price_delta !== 0 && ` (${mod.price_delta > 0 ? "+" : ""}${mod.price_delta})`}
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-4">
+                <Label className="mb-2 block">自定義:</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="名稱"
+                    id="mod-name"
+                    className="flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const nameInput = document.getElementById("mod-name") as HTMLInputElement;
+                        const priceInput = document.getElementById("mod-price") as HTMLInputElement;
+                        if (nameInput.value) {
+                          addModifier({ modifier_type: nameInput.value, qty: 1, price_delta: parseFloat(priceInput.value) || 0 });
+                          nameInput.value = "";
+                          priceInput.value = "";
+                        }
+                      }
+                    }}
+                  />
+                  <Input
+                    placeholder="價格"
+                    id="mod-price"
+                    type="number"
+                    className="w-20"
+                    defaultValue={0}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModifierDialogOpen(false)}>
+              完成
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

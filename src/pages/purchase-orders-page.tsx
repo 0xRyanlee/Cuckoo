@@ -76,6 +76,11 @@ export function PurchaseOrdersPage({
   const [addItemUnitId, setAddItemUnitId] = useState("");
   const [addItemCost, setAddItemCost] = useState("0");
 
+  const [receivePoId, setReceivePoId] = useState<number | null>(null);
+  const [receiveLotPrefix, setReceiveLotPrefix] = useState("");
+  const [receiveExpiryDate, setReceiveExpiryDate] = useState("");
+  const [receiveAutoBatch, setReceiveAutoBatch] = useState(true);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "draft": return <Badge variant="outline">草稿</Badge>;
@@ -128,7 +133,7 @@ export function PurchaseOrdersPage({
                           {order.status === "draft" && (
                             <>
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" onClick={() => { setAddItemPoId(order.id); setAddItemMaterialId(""); setAddItemQty("1"); setAddItemCost("0"); }}><Plus className="h-4 w-4" /></Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500" onClick={() => onReceiveOrder(order.id)}><Truck className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-500" onClick={() => { setReceivePoId(order.id); setReceiveLotPrefix(`PO${order.po_no.replace(/-/g, "").slice(-6)}`); setReceiveExpiryDate(""); }}><Truck className="h-4 w-4" /></Button>
                             </>
                           )}
                           {order.status === "draft" && (
@@ -256,6 +261,52 @@ export function PurchaseOrdersPage({
               });
               setAddItemPoId(null);
             }}>添加</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!receivePoId} onOpenChange={() => setReceivePoId(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>收貨入庫</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>批次號前綴（可選）</Label>
+              <Input 
+                value={receiveLotPrefix} 
+                onChange={(e) => setReceiveLotPrefix(e.target.value)} 
+                placeholder="自動生成批次號"
+              />
+              <p className="text-xs text-muted-foreground">將自動添加日期時間後綴，如: PO20260427-1430</p>
+            </div>
+            <div className="space-y-2">
+              <Label>過期日期（可選）</Label>
+              <Input 
+                type="date" 
+                value={receiveExpiryDate} 
+                onChange={(e) => setReceiveExpiryDate(e.target.value)} 
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                id="autoBatch" 
+                checked={receiveAutoBatch}
+                onChange={(e) => setReceiveAutoBatch(e.target.checked)}
+                className="rounded"
+              />
+              <Label htmlFor="autoBatch" className="text-sm font-normal">自動為每項材料生成獨立批次</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceivePoId(null)}>取消</Button>
+            <Button onClick={() => {
+              if (receivePoId) {
+                onReceiveOrder(receivePoId);
+              }
+              setReceivePoId(null);
+            }}>
+              <Truck className="mr-2 h-4 w-4" />確認收貨
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

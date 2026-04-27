@@ -1,15 +1,19 @@
 # Cuckoo 版本規劃與路線圖
 
-**更新時間**: 2026-04-26  
-**當前版本**: v1.1.0  
+**更新時間**: 2026-04-27  
+**當前版本**: v1.2.0 (架構優化版)  
 **基於**: 對抗性審計 v4.0（`docs/ui-ux-audit-report.md`）
 
 ---
 
-## ✅ v1.1.0 已完成功能
+## ✅ v1.2.0 已完成功能
 
 | 功能模組 | 實現狀態 | 備註 |
 |---------|---------|------|
+| React Router 路由化 | ✅ | 替代 activeTab，啟用 code splitting |
+| 統一類型定義 | ✅ | `src/types/index.ts` 消除 interface 重複 |
+| Hooks 拆分 | ✅ | useAppData / useAppActions / usePartialLoadData / useAppContext |
+| App.tsx 重構 | ✅ | 使用 hooks 替換 500+ 行 inline handlers |
 | 原材料管理 | ✅ | CRUD + 分類 + 標籤 + 狀態 |
 | 配方系統 | ✅ | 配方 + 明細 + 成本計算（2026-04-25 修復返回類型）|
 | 訂單流程 | ✅ | 創建→提交→KDS（2026-04-25 修復 orderId + 廚房工單）|

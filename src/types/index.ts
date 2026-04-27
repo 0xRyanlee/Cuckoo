@@ -106,6 +106,7 @@ export interface POSCartItem {
   spec: MenuItemSpec | null;
   qty: number;
   note: string;
+  modifiers: { modifier_type: string; material_id?: number; qty: number; price_delta: number }[];
 }
 export interface KitchenStation {
   id: number;
