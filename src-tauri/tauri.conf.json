@@ -39,6 +39,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "../RELEASE_INSTALL_GUIDE.md",
+      "../RELEASE_NOTES_v1.2.2.md"
+    ],
     "category": "Business",
     "shortDescription": "Cuckoo Restaurant Operations System",
     "longDescription": "A recipe-driven, local-first restaurant management system with inventory tracking, POS, KDS, and reporting.",
