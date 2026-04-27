@@ -314,6 +314,13 @@ pub fn calculate_recipe_cost(state: State<AppState>, recipe_id: i64) -> Result<R
     state.db.calculate_recipe_cost(recipe_id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn get_recipe_usage_count(state: State<AppState>, recipe_id: i64) -> Result<i64, String> {
+    // 查詢 recipe_items 表中 item_type='sub_recipe' 且 ref_id 等於該 recipe_id 的數量
+    let count = state.db.get_recipe_usage_count(recipe_id).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
 // ==================== 菜單 API ====================
 
 #[tauri::command]
@@ -665,6 +672,44 @@ pub fn remove_station_menu_item(state: State<AppState>, station_id: i64, menu_it
 }
 
 // ==================== 健康檢查 ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TelemetryPayload {
+    pub client_id: String,
+    pub version: String,
+    pub event_type: String, // "heartbeat", "error", "action"
+    pub uptime_hours: f64,
+    pub today_sales: f64,
+    pub today_orders: i32,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[tauri::command]
+pub async fn report_telemetry(
+    payload: TelemetryPayload,
+    webhook_url: Option<String>,
+) -> Result<(), String> {
+    let url = webhook_url.unwrap_or_else(|| {
+        "https://your-cloud-server.com/api/telemetry/heartbeat".to_string()
+    });
+    
+    let client = reqwest::Client::new();
+    match client.post(&url)
+        .json(&payload)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                Ok(())
+            } else {
+                Err(format!("server returned: {}", resp.status()))
+            }
+        }
+        Err(e) => Err(format!("request failed: {}", e))
+    }
+}
 
 #[tauri::command]
 pub fn health_check(state: State<AppState>) -> String {
@@ -1233,8 +1278,8 @@ pub fn create_print_template(state: State<AppState>, req: CreatePrintTemplateReq
 }
 
 #[tauri::command]
-pub fn update_print_template(state: State<AppState>, id: i64, name: Option<String>, content: Option<String>, paper_size: Option<String>, label_width_mm: Option<f64>, label_height_mm: Option<f64>, theme: Option<String>, restaurant_name: Option<String>, tagline: Option<String>, logo_data: Option<String>, show_price: Option<bool>, show_tax: Option<bool>, show_service_charge: Option<bool>, item_sort: Option<String>, modifiers_color: Option<String>) -> Result<(), String> {
-    state.db.update_print_template(id, name, content, paper_size, label_width_mm, label_height_mm, theme, restaurant_name, tagline, logo_data, show_price, show_tax, show_service_charge, item_sort, modifiers_color).map_err(|e| e.to_string())
+pub fn update_print_template(state: State<AppState>, id: i64, name: Option<String>, content: Option<String>, paper_size: Option<String>, label_width_mm: Option<f64>, label_height_mm: Option<f64>, theme: Option<String>, restaurant_name: Option<String>, tagline: Option<String>, logo_data: Option<String>, show_price: Option<bool>, show_tax: Option<bool>, show_service_charge: Option<bool>, item_sort: Option<String>, modifiers_color: Option<String>, is_active: Option<bool>) -> Result<(), String> {
+    state.db.update_print_template(id, name, content, paper_size, label_width_mm, label_height_mm, theme, restaurant_name, tagline, logo_data, show_price, show_tax, show_service_charge, item_sort, modifiers_color, is_active).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

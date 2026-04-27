@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { Printer, Copy, Settings, Plus, Pencil } from "lucide-react";
+import { Printer, Copy, Settings, Plus, Pencil, FileText, Tag } from "lucide-react";
 import { toast } from "sonner";
 import type { PrintTicketType } from "../types";
 
@@ -20,6 +21,8 @@ interface DebugPrintResult {
 
 export function PrintPage() {
   const [activeTab, setActiveTab] = useState("preview");
+  const navigate = useNavigate();
+
   const [ticketTypes, setTicketTypes] = useState<PrintTicketType[]>([]);
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState<number | null>(null);
   const [result, setResult] = useState<DebugPrintResult | null>(null);
@@ -339,17 +342,32 @@ export function PrintPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="templates">
+<TabsContent value="templates">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>打印模板</CardTitle>
-                <CardDescription>管理打印模板配置</CardDescription>
-              </div>
-              <Button size="sm"><Plus className="h-4 w-4 mr-2" />创建模板</Button>
+            <CardHeader>
+              <CardTitle>打印模板管理</CardTitle>
+              <CardDescription>管理厨房单、批次标签等打印模板，支持实时预览</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">模板管理功能 - 跳转至 print-templates-page</p>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate("/print-templates")}>
+                  <FileText className="h-6 w-6" />
+                  <div>
+                    <div className="font-medium">厨房单模板</div>
+                    <div className="text-xs text-muted-foreground">管理厨房打印模板</div>
+                  </div>
+                </Button>
+                <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate("/print-templates")}>
+                  <Tag className="h-6 w-6" />
+                  <div>
+                    <div className="font-medium">批次标签模板</div>
+                    <div className="text-xs text-muted-foreground">管理标签打印模板</div>
+                  </div>
+                </Button>
+              </div>
+              <Button onClick={() => navigate("/print-templates")} className="w-full">
+                <Plus className="h-4 w-4 mr-2" />打开模板管理
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

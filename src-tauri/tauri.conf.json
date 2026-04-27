@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Cuckoo 餐飲作業系統",
+        "title": "Cuckoo 餐饮作业系统",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -60,6 +60,15 @@
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "YOUR_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://your-cloud-server.com/api/updates/{{target}}/{{current_version}}"
+      ],
+      "dialog": false
     }
   }
 }

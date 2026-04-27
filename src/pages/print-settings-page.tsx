@@ -220,7 +220,7 @@ export function PrintSettingsPage() {
       {error && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
-          <button onClick={() => setError(null)} className="ml-2 underline hover:no-underline">关闭</button>
+          <Button variant="link" onClick={() => setError(null)} className="ml-2">關閉</Button>
         </div>
       )}
 

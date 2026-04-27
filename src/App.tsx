@@ -29,7 +29,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { toast } from "sonner";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppActions } from "@/hooks/useAppActions";
-import type { OrderItemModifier } from "./types";
+import type { OrderWithItems, OrderItemModifier } from "./types";
 
 // ==================== App ====================
 
@@ -39,6 +39,7 @@ function App() {
   const activeTab = location.pathname.slice(1) || "dashboard";
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void } | null>(null);
+  const [appStartTime] = useState(Date.now());
 
   const {
     loading, connected,
@@ -104,6 +105,7 @@ function App() {
     handleUpdateRecipe,
     handleAddRecipeItem,
     handleDeleteRecipeItem,
+    handleUpdateRecipeItem,
     handleRecalculateCost,
     handleCreateMenuCategory,
     handleUpdateMenuCategory,
@@ -151,6 +153,10 @@ function App() {
     handleDeleteBatch,
     handleLoadKDS,
     handleFinishTicket,
+    handleAddModifier,
+    handleDeleteModifier,
+    handleLoadModifiers,
+    handleReportTelemetry,
   } = actions;
 
   const handleCreateMenuItemFull = actions.handleCreateMenuItem;
@@ -162,6 +168,51 @@ function App() {
       </div>
     );
   }
+
+  useEffect(() => {
+    const startTelemetry = async (eventType = "heartbeat", metadata: any = null) => {
+      const todayOrders = orders.filter(o => {
+        const od = new Date(o.created_at);
+        const td = new Date();
+        return od.toDateString() === td.toDateString();
+      });
+      const todaySales = todayOrders.reduce((sum, o) => sum + (o.status === "submitted" ? o.amount_total : 0), 0);
+      const uptimeHours = (Date.now() - appStartTime) / (1000 * 60 * 60);
+      try {
+        await handleReportTelemetry({
+          client_id: "cuckoo_local",
+          version: "1.2.2",
+          event_type: eventType,
+          uptime_hours: uptimeHours,
+          today_sales: todaySales,
+          today_orders: todayOrders.length,
+          metadata: metadata,
+        });
+      } catch (e) {
+        console.error("telemetry error:", e);
+      }
+    };
+
+    // 全局錯誤捕捉
+    const handleError = (event: ErrorEvent) => {
+      startTelemetry("error", { message: event.message, stack: event.error?.stack });
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      startTelemetry("error", { message: String(event.reason), type: "unhandled_rejection" });
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+
+    startTelemetry();
+    const interval = setInterval(() => startTelemetry(), 60 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+      clearInterval(interval);
+    };
+  }, [orders, appStartTime]);
 
   return (
     <ErrorBoundary>
@@ -175,12 +226,12 @@ function App() {
               <Routes>
                 <Route path="/dashboard" element={<DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />} />
                 <Route path="/materials" element={<MaterialsPage materials={materials} categories={categories} tags={tags} units={units} onCreateMaterial={handleCreateMaterial} onUpdateMaterial={handleUpdateMaterial} onDeleteMaterial={handleDeleteMaterial} onRemoveMaterialTag={handleRemoveMaterialTag} onCreateCategory={handleCreateCategory} onDeleteCategory={handleDeleteCategory} onCreateTag={handleCreateTag} onDeleteTag={handleDeleteTag} searchQuery={searchQuery} />} />
-                <Route path="/recipes" element={<RecipesPage recipes={recipes} selectedRecipe={selectedRecipe} recipeCost={recipeCost} materials={materials} units={units} onCreateRecipe={handleCreateRecipe} onViewRecipe={handleViewRecipe} onDeleteRecipe={handleDeleteRecipe} onUpdateRecipe={handleUpdateRecipe} onAddRecipeItem={handleAddRecipeItem} onDeleteRecipeItem={handleDeleteRecipeItem} onRecalculateCost={handleRecalculateCost} searchQuery={searchQuery} />} />
-                <Route path="/inventory" element={<InventoryPage inventorySummary={inventorySummary} inventoryBatches={inventoryBatches} inventoryTxns={inventoryTxns} materials={materials} suppliers={suppliers} onCreateBatch={handleCreateBatch} onAdjustInventory={handleAdjustInventory} onRecordWastage={handleRecordWastage} onDeleteBatch={handleDeleteBatch} searchQuery={searchQuery} />} />
+                <Route path="/recipes" element={<RecipesPage recipes={recipes} selectedRecipe={selectedRecipe} recipeCost={recipeCost} materials={materials} units={units} onCreateRecipe={handleCreateRecipe} onViewRecipe={handleViewRecipe} onDeleteRecipe={handleDeleteRecipe} onUpdateRecipe={handleUpdateRecipe} onAddRecipeItem={handleAddRecipeItem} onDeleteRecipeItem={handleDeleteRecipeItem} onUpdateRecipeItem={handleUpdateRecipeItem} onRecalculateCost={handleRecalculateCost} searchQuery={searchQuery} />} />
+                <Route path="/inventory" element={<InventoryPage inventorySummary={inventorySummary} inventoryBatches={inventoryBatches} inventoryTxns={inventoryTxns} materials={materials} suppliers={suppliers} onCreateBatch={handleCreateBatch} onAdjustInventory={handleAdjustInventory} onRecordWastage={handleRecordWastage} onDeleteBatch={handleDeleteBatch} onUpdateMaterial={handleUpdateMaterial} searchQuery={searchQuery} />} />
                 <Route path="/menu" element={<MenuPage menuCategories={menuCategories} menuItems={menuItems} recipes={recipes} onCreateMenuCategory={handleCreateMenuCategory} onCreateMenuItem={handleCreateMenuItemFull} onToggleAvailability={handleToggleMenuItem} onBatchToggleAvailability={handleBatchToggleMenuItem} onUpdateMenuItem={handleUpdateMenuItem} onDeleteMenuItem={handleDeleteMenuItem} onUpdateMenuCategory={handleUpdateMenuCategory} onDeleteMenuCategory={handleDeleteMenuCategory} onGetSpecs={handleGetSpecs} onCreateSpec={handleCreateSpec} onUpdateSpec={handleUpdateSpec} onDeleteSpec={handleDeleteSpec} searchQuery={searchQuery} />} />
                 <Route path="/pos" element={<POSPage menuCategories={menuCategories} menuItems={menuItems} onCreateOrder={handlePOSOrder} onCreateAndSubmit={handlePOSAndSubmit} onGetSpecs={handleGetSpecs} searchQuery={searchQuery} loading={loading} />} />
                 <Route path="/suppliers" element={<SuppliersPage suppliers={suppliers} onCreateSupplier={handleCreateSupplier} onUpdateSupplier={handleUpdateSupplier} onDeleteSupplier={handleDeleteSupplier} searchQuery={searchQuery} />} />
-                <Route path="/orders" element={<OrdersPage orders={orders} selectedOrder={selectedOrder} menuItems={Object.fromEntries(menuItems.map((item) => [item.id, item.name]))} materials={materials} onCreateOrder={handleCreateOrder} onSubmitOrder={handleSubmitOrder} onCancelOrder={handleCancelOrder} onBatchCancelOrder={handleBatchCancelOrder} onViewOrder={handleViewOrder} onAddModifier={async (data) => { try { await invoke("add_order_item_modifier", { req: data }); toast.success("加料已添加"); } catch (e) { toast.error("添加加料失败", { description: String(e) }); } }} onDeleteModifier={async (modifier_id) => { try { await invoke("delete_order_item_modifier", { modifierId: modifier_id }); toast.success("加料已删除"); } catch (e) { toast.error("删除加料失败", { description: String(e) }); } }} onLoadModifiers={async (order_item_id) => { return await invoke<OrderItemModifier[]>("get_order_item_modifiers", { orderItemId: order_item_id }); }} onLoadMore={handleLoadMoreOrders} hasMore={ordersHasMore} searchQuery={searchQuery} />} />
+                <Route path="/orders" element={<OrdersPage orders={orders} selectedOrder={selectedOrder} menuItems={Object.fromEntries(menuItems.map((item) => [item.id, item.name]))} materials={materials} onCreateOrder={handleCreateOrder} onSubmitOrder={handleSubmitOrder} onCancelOrder={handleCancelOrder} onBatchCancelOrder={handleBatchCancelOrder} onViewOrder={handleViewOrder} onViewOrderWithModifiers={async (id: number) => { const orderData = await invoke<OrderWithItems>("get_order_with_items", { orderId: id }); const modifiers: Record<number, OrderItemModifier[]> = {}; for (const item of orderData.items) { try { modifiers[item.id] = await handleLoadModifiers(item.id); } catch { modifiers[item.id] = []; } } return { orderData, modifiers }; }} onAddModifier={handleAddModifier} onDeleteModifier={handleDeleteModifier} onLoadModifiers={handleLoadModifiers} onLoadMore={handleLoadMoreOrders} hasMore={ordersHasMore} searchQuery={searchQuery} />} />
                 <Route path="/kds" element={<KDSPage allTickets={kdsTickets} stations={stations} menuItemNames={Object.fromEntries(menuItems.map((m) => [m.id, m.name]))} onStartTicket={async (id) => { try { await invoke("start_ticket", { ticketId: id, operator: null }); toast.success("工单已开始"); loadData(); } catch (e) { toast.error("开始工单失败", { description: String(e) }); } }} onFinishTicket={async (id) => { const ticket = kdsTickets.find((t) => t.id === id); if (ticket) { await handleFinishTicket(ticket); } else { await invoke("finish_ticket", { ticketId: id, operator: null }); toast.success("工单已完成"); loadData(); } }} onRefresh={handleLoadKDS} />} />
                 <Route path="/attributes" element={<AttributesPage attributeTemplates={attributeTemplates} />} />
                 <Route path="/settings" element={<SettingsPage connected={connected} />} />

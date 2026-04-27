@@ -74,7 +74,7 @@ export function ProductionOrdersPage({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "draft": return <Badge variant="outline">草稿</Badge>;
-      case "in_progress": return <Badge className="bg-blue-600">生產中</Badge>;
+      case "in_progress": return <Badge className="bg-blue-600">生产中</Badge>;
       case "completed": return <Badge className="bg-emerald-600">已完成</Badge>;
       case "cancelled": return <Badge variant="destructive">已取消</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;
@@ -85,16 +85,16 @@ export function ProductionOrdersPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">生產管理</h2>
-          <p className="text-sm text-muted-foreground">管理生產單、半成品加工</p>
+          <h2 className="text-2xl font-semibold tracking-tight">生产管理</h2>
+          <p className="text-sm text-muted-foreground">管理生产单、半成品加工</p>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ChefHat className="h-4 w-4" />生產單列表</CardTitle>
-            <CardDescription>共 {filteredOrders.length} 張生產單{filteredOrders.length !== orders.length ? `（篩選自 ${orders.length} 張）` : ""}</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ChefHat className="h-4 w-4" />生产单列表</CardTitle>
+            <CardDescription>共 {filteredOrders.length} 张生产单{filteredOrders.length !== orders.length ? `（筛选自 ${orders.length} 张）` : ""}</CardDescription>
           </CardHeader>
           <CardContent>
             {filteredOrders.length === 0 ? (
@@ -103,7 +103,7 @@ export function ProductionOrdersPage({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>單號</TableHead>
+                    <TableHead>单号</TableHead>
                     <TableHead>配方</TableHead>
                     <TableHead>狀態</TableHead>
                     <TableHead className="text-right">計劃量</TableHead>
@@ -143,19 +143,19 @@ export function ProductionOrdersPage({
 
         <div className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>新增生產單</CardTitle></CardHeader>
+            <CardHeader><CardTitle>新增生产单</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>配方</Label>
                 <Select value={newRecipeId} onValueChange={setNewRecipeId}>
-                  <SelectTrigger><SelectValue placeholder="選擇配方" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="选择配方" /></SelectTrigger>
                   <SelectContent>
                     {recipes.map((r) => <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.code})</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>計劃產量</Label>
+                <Label>计划产量</Label>
                 <Input type="number" value={newPlannedQty} onChange={(e) => setNewPlannedQty(e.target.value)} step="0.01" />
               </div>
               <div className="space-y-2">
@@ -172,7 +172,7 @@ export function ProductionOrdersPage({
                   setNewRecipeId(""); setNewPlannedQty("1"); setNewOperator("");
                 }
               }} disabled={!newRecipeId}>
-                <Plus className="mr-2 h-4 w-4" />新增生產單
+                <Plus className="mr-2 h-4 w-4" />新增生产单
               </Button>
             </CardContent>
           </Card>
@@ -180,7 +180,7 @@ export function ProductionOrdersPage({
           {selectedOrder && (
             <Card>
               <CardHeader>
-                <CardTitle>生產單詳情</CardTitle>
+                <CardTitle>生产单详情</CardTitle>
                 <CardDescription>{selectedOrder.order.production_no}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -217,7 +217,7 @@ export function ProductionOrdersPage({
           <DialogHeader><DialogTitle>完成生產單</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>實際產量</Label>
+              <Label>实际产量</Label>
               <Input type="number" value={completeActualQty} onChange={(e) => setCompleteActualQty(e.target.value)} step="0.01" />
             </div>
           </div>

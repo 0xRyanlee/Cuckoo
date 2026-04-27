@@ -192,12 +192,14 @@ export function AppHeader({ searchQuery, onSearchChange, onRefresh, refreshing =
                           <p className={`text-sm truncate ${!n.is_read ? "font-medium" : ""}`}>
                             {n.title}
                           </p>
-                          <button
-                            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-muted rounded"
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
                             onClick={(e) => { e.stopPropagation(); handleDelete(n.id); }}
                           >
                             <X className="h-3 w-3 text-muted-foreground" />
-                          </button>
+                          </Button>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
                         <p className="text-[10px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>

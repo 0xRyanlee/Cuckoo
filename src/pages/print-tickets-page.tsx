@@ -34,7 +34,7 @@ export function PrintTicketsPage() {
       setTicketTypes(types);
       setStations(stationData);
     } catch (e) {
-      toast.error("加載失敗", { description: String(e) });
+      toast.error("加载失败", { description: String(e) });
     } finally {
       setLoading(false);
     }
@@ -43,11 +43,11 @@ export function PrintTicketsPage() {
   async function handleCreate(req: CreateTicketTypeRequest) {
     try {
       await invoke<number>("create_print_ticket_type", { req });
-      toast.success("票據類型已創建");
+      toast.success("票据类型已创建");
       loadData();
       setCreateDialog(false);
     } catch (e) {
-      toast.error("創建失敗", { description: String(e) });
+      toast.error("创建失败", { description: String(e) });
     }
   }
 
@@ -58,17 +58,17 @@ export function PrintTicketsPage() {
       loadData();
       setEditDialog(null);
     } catch (e) {
-      toast.error("更新失敗", { description: String(e) });
+      toast.error("更新失败", { description: String(e) });
     }
   }
 
   async function handleDelete(id: number) {
     try {
       await invoke("delete_print_ticket_type", { id });
-      toast.success("已刪除");
+      toast.success("已删除");
       loadData();
     } catch (e) {
-      toast.error("刪除失敗", { description: String(e) });
+      toast.error("删除失败", { description: String(e) });
     }
   }
 
@@ -78,14 +78,14 @@ export function PrintTicketsPage() {
       toast.success("已設為默認");
       loadData();
     } catch (e) {
-      toast.error("設置失敗", { description: String(e) });
+      toast.error("设置失败", { description: String(e) });
     }
   }
 
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center">
-        <div className="text-muted-foreground">加載中...</div>
+        <div className="text-muted-foreground">加载中...</div>
       </div>
     );
   }
@@ -151,19 +151,16 @@ export function PrintTicketsPage() {
               </div>
 
               <div className="text-sm">
-                <span className="text-muted-foreground">顯示項:</span>
+                <span className="text-muted-foreground">显示项:</span>
                 <div className="flex flex-wrap gap-2 mt-1">
-                  {ticket.show_order_no && <Badge variant="outline">訂單號</Badge>}
+                  {ticket.show_order_no && <Badge variant="outline">订单号</Badge>}
                   {ticket.show_table_no && <Badge variant="outline">桌號</Badge>}
                   {ticket.show_dine_type && <Badge variant="outline">用餐類型</Badge>}
                   {ticket.show_item_name && <Badge variant="outline">菜品</Badge>}
                   {ticket.show_item_qty && <Badge variant="outline">數量</Badge>}
-                  {ticket.show_item_price && <Badge variant="outline">單價</Badge>}
-                  {ticket.show_item_spec && <Badge variant="outline">規格</Badge>}
-                  {ticket.show_item_note && <Badge variant="outline">備註</Badge>}
-                  {ticket.show_total_amount && <Badge variant="outline">合計</Badge>}
-                  {ticket.show_price && <Badge variant="outline" className="bg-yellow-100">顯示價格</Badge>}
-                  {ticket.show_seq && <Badge variant="outline" className="bg-blue-100">顯示序號</Badge>}
+{ticket.show_item_price && <Badge variant="outline">单价</Badge>}
+                  {ticket.show_price && <Badge variant="outline" className="bg-yellow-100">显示价格</Badge>}
+                  {ticket.show_seq && <Badge variant="outline" className="bg-blue-100">显示序号</Badge>}
                 </div>
               </div>
 
@@ -179,7 +176,7 @@ export function PrintTicketsPage() {
                 <EditTicketTypeDialog ticket={editDialog} open={!!editDialog} stations={stations} onSubmit={(req) => handleUpdate(ticket.id, req)} onCancel={() => setEditDialog(null)} />
                 <Button variant="outline" size="sm" onClick={() => handleDelete(ticket.id)}>
                   <Trash2 className="h-3 w-3 mr-1" />
-                  刪除
+                  删除
                 </Button>
               </div>
             </CardContent>
@@ -189,7 +186,7 @@ export function PrintTicketsPage() {
         {ticketTypes.length === 0 && (
           <Card>
             <CardContent className="py-10 text-center text-muted-foreground">
-              暂无票據類型，點擊上方按鈕創建
+              暂无票据类型，点击上方按钮创建
             </CardContent>
           </Card>
         )}
@@ -272,7 +269,7 @@ function CreateTicketTypeDialog({ stations, open, onSubmit, onCancel }: { statio
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>新建票據類型</DialogTitle>
-          <DialogDescription>創建新的打印票據類型配置</DialogDescription>
+          <DialogDescription>创建新的打印票据类型配置</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-2 gap-4">
@@ -314,22 +311,22 @@ function CreateTicketTypeDialog({ stations, open, onSubmit, onCancel }: { statio
             </div>
           </div>
           <div className="space-y-2">
-            <Label>配置選項</Label>
+            <Label>配置选项</Label>
             <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <Checkbox id="showPrice" checked={showPrice} onCheckedChange={(v) => setShowPrice(!!v)} />
-                <Label htmlFor="showPrice">顯示單價</Label>
+                <Label htmlFor="showPrice">显示单价</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="showSeq" checked={showSeq} onCheckedChange={(v) => setShowSeq(!!v)} />
-                <Label htmlFor="showSeq">顯示序號</Label>
+                <Label htmlFor="showSeq">显示序号</Label>
               </div>
             </div>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>取消</Button>
-          <Button onClick={handleSubmit} disabled={!code || !name}>創建</Button>
+          <Button onClick={handleSubmit} disabled={!code || !name}>创建</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -393,7 +390,7 @@ function EditTicketTypeDialog({ ticket, open, stations, onSubmit, onCancel }: { 
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>編輯票據類型 - {ticket.name}</DialogTitle>
+          <DialogTitle>编辑票据类型 - {ticket.name}</DialogTitle>
         </DialogHeader>
       <div className="grid gap-4 py-4">
         <div className="grid grid-cols-2 gap-4">
@@ -453,7 +450,7 @@ function EditTicketTypeDialog({ ticket, open, stations, onSubmit, onCancel }: { 
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>顯示配置</Label>
+          <Label>显示配置</Label>
           <div className="grid grid-cols-4 gap-2">
             <div className="flex items-center gap-2">
               <Checkbox id="showPrice" checked={showPrice} onCheckedChange={(v) => setShowPrice(!!v)} />
@@ -485,7 +482,7 @@ function EditTicketTypeDialog({ ticket, open, stations, onSubmit, onCancel }: { 
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="showItemPrice" checked={showItemPrice} onCheckedChange={(v) => setShowItemPrice(!!v)} />
-              <Label htmlFor="showItemPrice">小計單價</Label>
+              <Label htmlFor="showItemPrice">小计单价</Label>
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="showItemSubtotal" checked={showItemSubtotal} onCheckedChange={(v) => setShowItemSubtotal(!!v)} />
@@ -508,7 +505,7 @@ function EditTicketTypeDialog({ ticket, open, stations, onSubmit, onCancel }: { 
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Checkbox id="isActive" checked={isActive} onCheckedChange={(v) => setIsActive(!!v)} />
-            <Label htmlFor="isActive">啟用狀態</Label>
+            <Label htmlFor="isActive">启用状态</Label>
           </div>
         </div>
       </div>

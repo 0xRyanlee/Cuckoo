@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import { parseSafeFloat } from "@/lib/utils";
 
 interface MenuCategory { id: number; name: string; }
 interface MenuItem { id: number; name: string; sales_price: number; is_available: boolean; recipe_id: number | null; category_id: number | null; }
@@ -120,7 +122,16 @@ export function MenuPage({
 
   function saveEditItem() {
     if (!editMenuItem) return;
-    onUpdateMenuItem(editMenuItem.id, { name: editMenuItemName || undefined, category_id: editMenuItemCategory ? parseInt(editMenuItemCategory) : null, recipe_id: editMenuItemRecipe ? parseInt(editMenuItemRecipe) : null, sales_price: parseFloat(editMenuItemPrice) || 0 });
+    if (editMenuItemName !== undefined && !editMenuItemName.trim()) {
+      toast.error("名稱不能為空");
+      return;
+    }
+    const price = parseSafeFloat(editMenuItemPrice);
+    if (price !== null && price < 0) {
+      toast.error("單價不能為負數");
+      return;
+    }
+    onUpdateMenuItem(editMenuItem.id, { name: editMenuItemName || undefined, category_id: editMenuItemCategory ? parseInt(editMenuItemCategory) : null, recipe_id: editMenuItemRecipe ? parseInt(editMenuItemRecipe) : null, sales_price: price ?? 0 });
     setEditMenuItem(null);
   }
 
@@ -142,7 +153,20 @@ export function MenuPage({
 
   function handleCreateSpec() {
     if (!specMenuItem) return;
-    onCreateSpec({ menu_item_id: specMenuItem.id, spec_code: newSpecCode, spec_name: newSpecName, price_delta: parseFloat(newSpecPriceDelta) || 0, qty_multiplier: parseFloat(newSpecQtyMultiplier) || 1 });
+    if (!newSpecCode.trim() || !newSpecName.trim()) {
+      toast.error("请填写规格代码和名称");
+      return;
+    }
+    const qtyMultiplier = parseSafeFloat(newSpecQtyMultiplier);
+    if (qtyMultiplier === null || qtyMultiplier <= 0) {
+      toast.error("數量倍數必須大於 0");
+      return;
+    }
+    const priceDelta = parseSafeFloat(newSpecPriceDelta);
+    if (priceDelta === null) {
+      toast("價格調整無效，已設為 0", { icon: "⚠️" });
+    }
+    onCreateSpec({ menu_item_id: specMenuItem.id, spec_code: newSpecCode.trim(), spec_name: newSpecName.trim(), price_delta: priceDelta ?? 0, qty_multiplier: qtyMultiplier });
     setNewSpecCode(""); setNewSpecName(""); setNewSpecPriceDelta("0"); setNewSpecQtyMultiplier("1");
     onGetSpecs(specMenuItem.id).then(setSpecList);
   }
@@ -302,7 +326,7 @@ export function MenuPage({
                         </TableCell>
                         <TableCell className="text-right">
                           {editingSpec?.id === spec.id ? (
-                            <Input type="number" value={editingSpec.price_delta} onChange={(e) => setEditingSpec({ ...editingSpec, price_delta: parseFloat(e.target.value) || 0 })} className="h-8 w-20 ml-auto" />
+                            <Input type="number" value={editingSpec.price_delta} onChange={(e) => { const v = parseSafeFloat(e.target.value); setEditingSpec({ ...editingSpec, price_delta: v ?? editingSpec.price_delta }); }} className="h-8 w-20 ml-auto" />
                           ) : (<span className={spec.price_delta > 0 ? "text-destructive" : spec.price_delta < 0 ? "text-emerald-500" : ""}>{spec.price_delta > 0 ? "+" : ""}¥{spec.price_delta.toFixed(2)}</span>)}
                         </TableCell>
                         <TableCell className="text-right">

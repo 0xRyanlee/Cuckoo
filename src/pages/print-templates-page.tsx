@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import DOMPurify from "dompurify";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, Eye, Save, Printer, Star, FileBox } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { toast } from "sonner";
 
 interface PrintTemplate {
   id: number;
@@ -71,6 +74,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
   const [formShowServiceCharge, setFormShowServiceCharge] = useState(true);
   const [formItemSort, setFormItemSort] = useState("entry");
   const [formModifiersColor, setFormModifiersColor] = useState("red");
+  const [formIsActive, setFormIsActive] = useState(true);
 
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,7 +84,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       const result = await invoke<PrintTemplate[]>("get_print_templates", { templateType: type });
       setTemplates(result);
     } catch (e) {
-      console.error("載入模板失敗:", e);
+      console.error("载入模板失败:", e);
     }
   }
 
@@ -103,6 +107,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
     setFormShowServiceCharge(true);
     setFormItemSort("entry");
     setFormModifiersColor("red");
+    setFormIsActive(true);
     setLivePreviewHtml("");
     setLivePreviewError("");
     setEditDialogOpen(true);
@@ -125,12 +130,17 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
     setFormShowServiceCharge(tpl.show_service_charge ?? true);
     setFormItemSort(tpl.item_sort || "entry");
     setFormModifiersColor(tpl.modifiers_color || "red");
+    setFormIsActive(tpl.is_active);
     setLivePreviewHtml("");
     setLivePreviewError("");
     setEditDialogOpen(true);
   }
 
   async function saveTemplate() {
+    if (!formName.trim()) {
+      toast.error("请填写模板名称");
+      return;
+    }
     try {
       if (editingTemplate) {
         await invoke("update_print_template", {
@@ -149,7 +159,9 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
           showServiceCharge: formShowServiceCharge,
           itemSort: formItemSort,
           modifiersColor: formModifiersColor,
+          isActive: formIsActive,
         });
+        toast.success("模板已更新");
       } else {
         await invoke("create_print_template", {
           req: {
@@ -168,13 +180,15 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
             show_service_charge: formShowServiceCharge,
             item_sort: formItemSort,
             modifiers_color: formModifiersColor,
+            is_active: formIsActive,
           },
         });
+        toast.success("模板已创建");
       }
       setEditDialogOpen(false);
       loadTemplates();
     } catch (e) {
-      console.error("保存模板失敗:", e);
+      toast.error("保存模板失败", { description: String(e) });
     }
   }
 
@@ -183,7 +197,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       await invoke("delete_print_template", { id });
       loadTemplates();
     } catch (e) {
-      console.error("刪除模板失敗:", e);
+      console.error("删除模板失败:", e);
     }
   }
 
@@ -192,14 +206,14 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       await invoke("set_default_template", { id, templateType: type });
       loadTemplates();
     } catch (e) {
-      console.error("設置默認失敗:", e);
+      console.error("设置默认失败:", e);
     }
   }
 
   async function previewTemplate(tpl: PrintTemplate) {
     const sampleData = tpl.template_type === "kitchen_ticket"
       ? { order_no: "ORD20260423001", dine_type: "堂食", time: "2026-04-23 14:30", items: [{ name: "宮保雞丁", qty: 2, note: "少辣" }, { name: "麻婆豆腐", qty: 1, note: null }], note: "加急" }
-      : { lot_no: "LOT-20260423-001", material_name: "雞胸肉", quantity: 10, unit: "kg", expiry_date: "2026-05-01", supplier_name: "鮮肉供應商" };
+      : { lot_no: "LOT-20260423-001", material_name: "雞胸肉", quantity: 10, unit: "kg", expiry_date: "2026-05-01", supplier_name: "鲜肉供应商" };
 
     try {
       const result = await invoke<PreviewResult>("render_template_preview", { templateId: tpl.id, data: sampleData });
@@ -207,7 +221,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       setPreviewLines(result.lines);
       setPreviewDialogOpen(true);
     } catch (e) {
-      console.error("預覽失敗:", e);
+      console.error("预览失败:", e);
     }
   }
 
@@ -338,7 +352,19 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>模板類型</Label>
-                  <Select value={formType} onValueChange={(v) => { setFormType(v); if (v === "kitchen_ticket") { setFormContent(JSON.stringify(defaultKitchenTemplate, null, 2)); } else { setFormContent(JSON.stringify(defaultBatchLabelTemplate, null, 2)); } }}>
+                  <Select value={formType} onValueChange={(v) => {
+                    setFormType(v);
+                    if (!editingTemplate) {
+                      if (v === "kitchen_ticket") {
+                        setFormContent(JSON.stringify(defaultKitchenTemplate, null, 2));
+                      } else if (v === "batch_label") {
+                        setFormContent(JSON.stringify(defaultBatchLabelTemplate, null, 2));
+                      } else {
+                        setFormContent(JSON.stringify(defaultKitchenTemplate, null, 2));
+                      }
+                    }
+                    updateLivePreview(formContent, formPaperSize, formTheme, formRestaurantName, formTagline, formLogoData);
+                  }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="kitchen_ticket">厨房单</SelectItem>
@@ -403,6 +429,13 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
                 <Textarea value={formContent} onChange={(e) => { setFormContent(e.target.value); updateLivePreview(e.target.value, formPaperSize, formTheme, formRestaurantName, formTagline, formLogoData); }} rows={12} className="font-mono text-xs" />
                 <p className="text-xs text-muted-foreground">支持元素类型：text, separator, blank_lines, items。使用 {"{{variable}}"} 作为占位符。</p>
               </div>
+
+              <Separator />
+
+              <div className="flex items-center gap-3">
+                <Checkbox id="formIsActive" checked={formIsActive} onCheckedChange={(v) => setFormIsActive(!!v)} />
+                <Label htmlFor="formIsActive" className="text-sm font-normal">启用此模板（停用后不再出现在打印选项中）</Label>
+              </div>
             </div>
             
             {/* 右側：預覽 */}
@@ -417,7 +450,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
                     <pre className="text-xs whitespace-pre-wrap">{livePreviewError}</pre>
                   </div>
                 ) : livePreviewHtml ? (
-                  <div dangerouslySetInnerHTML={{ __html: livePreviewHtml }} />
+                  <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(livePreviewHtml) }} />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                     编辑以查看预览
@@ -459,16 +492,16 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
 
 const defaultKitchenTemplate = {
   elements: [
-    { type: "text", content: "Cuckoo 廚房單", align: "center", bold: true, size: "large" },
+    { type: "text", content: "Cuckoo 厨房单", align: "center", bold: true, size: "large" },
     { type: "separator" },
-    { type: "text", content: "單號: {{order_no}}" },
-    { type: "text", content: "類型: {{dine_type}}" },
-    { type: "text", content: "時間: {{time}}" },
+    { type: "text", content: "单号: {{order_no}}" },
+    { type: "text", content: "类型: {{dine_type}}" },
+    { type: "text", content: "时间: {{time}}" },
     { type: "separator" },
-    { type: "text", content: "菜品明細", bold: true },
+    { type: "text", content: "菜品明细", bold: true },
     { type: "items" },
     { type: "separator" },
-    { type: "text", content: "訂單備註: {{note}}", bold: true },
+    { type: "text", content: "订单备注: {{note}}", bold: true },
     { type: "blank_lines", count: 3 },
   ],
 };

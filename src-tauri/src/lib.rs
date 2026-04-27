@@ -6,6 +6,7 @@ use commands::AppState;
 use database::Database;
 use std::fs;
 use std::path::PathBuf;
+use std::panic;
 
 fn get_db_path() -> PathBuf {
     // 獲取應用數據目錄
@@ -19,8 +20,35 @@ fn get_db_path() -> PathBuf {
     data_dir.join("cuckoo.db")
 }
 
+fn get_log_dir() -> PathBuf {
+    let data_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Cuckoo")
+        .join("logs");
+    fs::create_dir_all(&data_dir).expect("Failed to create log directory");
+    data_dir
+}
+
+fn setup_panic_hook() {
+    let log_dir = get_log_dir();
+    panic::set_hook(Box::new(move |panic_info| {
+        let log_file = log_dir.join("crash.log");
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let message = format!(
+            "[{}] PANIC: {}\nLocation: {:?}\n\n",
+            timestamp,
+            panic_info,
+            panic_info.location()
+        );
+        let _ = fs::write(&log_file, &message);
+        eprintln!("{}", message);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    setup_panic_hook();
+    
     let db_path = get_db_path();
     log::info!("Database path: {:?}", db_path);
     
@@ -30,10 +58,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState { db })
         .invoke_handler(tauri::generate_handler![
             // 健康檢查
             commands::health_check,
+            commands::report_telemetry,
             // 單位
             commands::get_units,
             // 材料分類
@@ -65,6 +95,7 @@ pub fn run() {
             commands::create_recipe,
             commands::add_recipe_item,
             commands::calculate_recipe_cost,
+            commands::get_recipe_usage_count,
             // 菜單
             commands::get_menu_categories,
             commands::create_menu_category,

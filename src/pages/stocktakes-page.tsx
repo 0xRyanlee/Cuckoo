@@ -85,8 +85,8 @@ export function StocktakesPage({
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />盤點單列表</CardTitle>
-            <CardDescription>共 {filteredStocktakes.length} 張盤點單{filteredStocktakes.length !== stocktakes.length ? `（篩選自 ${stocktakes.length} 張）` : ""}</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ClipboardList className="h-4 w-4" />盘点单列表</CardTitle>
+            <CardDescription>共 {filteredStocktakes.length} 张盘点单{filteredStocktakes.length !== stocktakes.length ? `（筛选自 ${stocktakes.length} 张）` : ""}</CardDescription>
           </CardHeader>
           <CardContent>
             {filteredStocktakes.length === 0 ? (
@@ -95,10 +95,10 @@ export function StocktakesPage({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>單號</TableHead>
-                    <TableHead>狀態</TableHead>
+                    <TableHead>单号</TableHead>
+                    <TableHead>状态</TableHead>
                     <TableHead>操作人</TableHead>
-                    <TableHead>創建時間</TableHead>
+                    <TableHead>创建时间</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -130,15 +130,15 @@ export function StocktakesPage({
 
         <div className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>新增盤點</CardTitle></CardHeader>
+            <CardHeader><CardTitle>新增盘点</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>操作人（可選）</Label>
                 <Input value={newOperator} onChange={(e) => setNewOperator(e.target.value)} placeholder="操作人姓名" />
               </div>
               <div className="space-y-2">
-                <Label>備註（可選）</Label>
-                <Input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="盤點備註" />
+                <Label>备注（可选）</Label>
+                <Input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="盘点备注" />
               </div>
               <Button className="w-full" onClick={() => {
                 onCreateStocktake({
@@ -147,26 +147,26 @@ export function StocktakesPage({
                 });
                 setNewOperator(""); setNewNote("");
               }}>
-                <Plus className="mr-2 h-4 w-4" />新增盤點單
+                <Plus className="mr-2 h-4 w-4" />新增盘点单
               </Button>
-              <p className="text-xs text-muted-foreground">自動帶入所有有庫存的批次，實際數量預設等於系統數量</p>
+              <p className="text-xs text-muted-foreground">自動帶入所有有库存的批次，實際數量預設等於系統數量</p>
             </CardContent>
           </Card>
 
           {selectedStocktake && (
             <Card>
               <CardHeader>
-                <CardTitle>盤點詳情</CardTitle>
+                <CardTitle>盘点详情</CardTitle>
                 <CardDescription>{selectedStocktake.stocktake.stocktake_no}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">狀態</span>{getStatusBadge(selectedStocktake.stocktake.status)}</div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">状态</span>{getStatusBadge(selectedStocktake.stocktake.status)}</div>
                   <div className="flex justify-between"><span className="text-muted-foreground">操作人</span><span>{selectedStocktake.stocktake.operator || "-"}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">備註</span><span>{selectedStocktake.stocktake.note || "-"}</span></div>
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium mb-2 flex items-center gap-1"><AlertTriangle className="h-3 w-3" />盤點明細</h4>
+                  <h4 className="text-sm font-medium mb-2 flex items-center gap-1"><AlertTriangle className="h-3 w-3" />盘点明细</h4>
                   {selectedStocktake.items.length === 0 ? (
                     <EmptyState icon={Package} title="暂无材料" description="盘点单中没有材料" />
                   ) : (
@@ -195,7 +195,7 @@ export function StocktakesPage({
                                   if (editingActualQty === "" || isNaN(qty) || qty < 0) return;
                                   onUpdateItem(item.id, qty);
                                   setEditingItemId(null);
-                                }}>確認</Button>
+                                }}>确认</Button>
                               </>
                             ) : (
                               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => {

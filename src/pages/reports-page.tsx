@@ -41,11 +41,11 @@ export function ReportsPage() {
 
   function exportAllCSV() {
     const ds = `${startDate}_${endDate}`;
-    downloadCSV(`銷售報表_${ds}.csv`, ["日期", "銷售額", "訂單數"], salesData.map(([d, amt, cnt]) => [d, amt.toFixed(2), cnt]));
-    downloadCSV(`分類報表_${ds}.csv`, ["分類", "銷售額", "訂單數"], categoryData.map(([cat, amt, cnt]) => [cat, amt.toFixed(2), cnt]));
-    downloadCSV(`毛利報表_${ds}.csv`, ["日期", "收入", "成本", "毛利"], profitData.map(([d, rev, cost, profit]) => [d, rev.toFixed(2), cost.toFixed(2), profit.toFixed(2)]));
-    downloadCSV(`熱銷商品_${ds}.csv`, ["商品", "銷售額", "數量", "均價"], topItems.map(([name, amt, qty, avg]) => [name, amt.toFixed(2), qty, avg.toFixed(2)]));
-    downloadCSV(`原料消耗_${ds}.csv`, ["原料", "消耗量", "成本", "訂單數"], consumptionData.map(([name, qty, cost, cnt]) => [name, qty.toFixed(4), cost.toFixed(2), cnt]));
+    downloadCSV(`销售报表_${ds}.csv`, ["日期", "销售额", "订单数"], salesData.map(([d, amt, cnt]) => [d, amt.toFixed(2), cnt]));
+    downloadCSV(`分类报表_${ds}.csv`, ["分类", "销售额", "订单数"], categoryData.map(([cat, amt, cnt]) => [cat, amt.toFixed(2), cnt]));
+    downloadCSV(`毛利报表_${ds}.csv`, ["日期", "收入", "成本", "毛利"], profitData.map(([d, rev, cost, profit]) => [d, rev.toFixed(2), cost.toFixed(2), profit.toFixed(2)]));
+    downloadCSV(`热销商品_${ds}.csv`, ["商品", "销售额", "数量", "均价"], topItems.map(([name, amt, qty, avg]) => [name, amt.toFixed(2), qty, avg.toFixed(2)]));
+    downloadCSV(`原料消耗_${ds}.csv`, ["原料", "消耗量", "成本", "订单数"], consumptionData.map(([name, qty, cost, cnt]) => [name, qty.toFixed(4), cost.toFixed(2), cnt]));
   }
 
   async function loadReports() {
@@ -93,7 +93,7 @@ export function ReportsPage() {
       {error && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
           报表加载失败: {error}
-          <button onClick={() => setError(null)} className="ml-2 underline hover:no-underline">关闭</button>
+          <Button variant="link" onClick={() => setError(null)} className="ml-2">關閉</Button>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { Tag, HelpCircle } from "lucide-react";
 
 interface AttributeTemplate {
@@ -28,10 +29,10 @@ export function AttributesPage({ attributeTemplates }: AttributesPageProps) {
           <p className="text-sm text-muted-foreground">管理批次、材料和配方的自定义属性</p>
         </div>
         <Tooltip>
-          <TooltipTrigger>
-            <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="icon" className="h-7 w-7 rounded-full">
               <HelpCircle className="h-4 w-4" />
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent side="right" className="max-w-sm p-4">
             <div className="space-y-2 text-sm">

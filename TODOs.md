@@ -1,6 +1,6 @@
 # 📋 Cuckoo TODOs — 開發任務清單
 
-> **Last Updated**: 2026-04-27 | **Version**: v1.2.0
+> **Last Updated**: 2026-04-28 | **Version**: v1.2.1
 >
 > 本清單基於 2026-04-26 對抗性審計 v4.0，反映當前真實狀態。
 
@@ -70,7 +70,24 @@
 - [x] **React Router** — 啟用 code splitting ✅
 - [ ] **Hooks 集成到 App.tsx** — ⏸️ **測試後執行**（大型重構，風險高）
 
-### 安全監控
+### v1.2.1 - 配方 UX 重構與防呆 (已完成)
+
+- [x] **配方結構重構** — 採用方案二：可展開樹狀表格 (Nested Tree-Table) ✅
+- [x] **行內編輯 (Inline-editing)** — 移除 `recipes-page` 所有新增/編輯 Dialog，改為表格內 Input ✅
+- [x] **快速新增行** — 配方詳情表格底部固定一行快捷選擇與輸入欄 ✅
+- [x] **成本可視化** — 加入成本佔比的 Progress Bar (基於 Shadcn UI) ✅
+- [x] **跨模塊依賴防呆** — 修改共用半成品時彈出 ConfirmDialog 警告 ✅ (已有 ConfirmDialog)
+- [x] **全局本地化清洗** — 移除遺留的繁體字 (Toast, EmptyState, Sidebar) ✅
+- [x] **購物車防呆** — `pos-page` 增加一鍵清空購物車按鈕 ✅
+
+### v1.2.2 - 配方防呆與遙測系統 (已完成)
+
+- [x] **配方刪除防呆** — 配方刪除增加 ConfirmDialog 二次確認 ✅
+- [x] **子配方依賴警告** — 修改半成品時彈出 confirm 警告 ✅
+- [x] **遙測心跳包** — Rust API + 前端定時上報 ✅
+- [x] **遠程協助日誌** — Rust panic hook 寫入日誌 ✅
+
+### 安全與數據完整性
 
 - [x] **打印模板 XSS** — dangerouslySetInnerHTML 無 sanitization 🟡 監控中
 - [x] **Mutex 中毒風險** — 140 個 lock().unwrap() 🟡 監控中

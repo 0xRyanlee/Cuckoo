@@ -145,7 +145,7 @@ export function KDSPage({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">廚房顯示系統</h2>
-          <p className="text-sm text-muted-foreground">{pendingTickets.length} 張待處理工單</p>
+          <p className="text-sm text-muted-foreground">{pendingTickets.length} 张待处理工单</p>
         </div>
         <div className="flex items-center gap-2">
           {stations.length > 0 && (

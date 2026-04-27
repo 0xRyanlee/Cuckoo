@@ -472,6 +472,7 @@ pub struct CreatePrintTemplateRequest {
     pub show_service_charge: Option<bool>,
     pub item_sort: Option<String>,
     pub modifiers_color: Option<String>,
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1627,6 +1628,17 @@ impl Database {
             params![recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no],
         )?;
         Ok(conn.last_insert_rowid())
+    }
+
+    pub fn get_recipe_usage_count(&self, recipe_id: i64) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        // 檢查在 recipe_items 表中被作為子配方引用的次數
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM recipe_items WHERE item_type = 'sub_recipe' AND ref_id = ?1",
+            params![recipe_id],
+            |row| row.get(0),
+        )?;
+        Ok(count)
     }
 
     pub fn calculate_recipe_cost(&self, recipe_id: i64) -> Result<RecipeCostResult> {
@@ -3135,16 +3147,16 @@ Ok(())
 
     pub fn create_print_template(&self, req: &CreatePrintTemplateRequest) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("INSERT INTO print_templates (name, template_type, paper_size, label_width_mm, label_height_mm, content, theme, restaurant_name, tagline, logo_data, show_price, show_tax, show_service_charge, item_sort, modifiers_color) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)", params![
+        conn.execute("INSERT INTO print_templates (name, template_type, paper_size, label_width_mm, label_height_mm, content, theme, restaurant_name, tagline, logo_data, show_price, show_tax, show_service_charge, item_sort, modifiers_color, is_active, is_default) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0)", params![
             req.name, req.template_type, req.paper_size, req.label_width_mm, req.label_height_mm, req.content,
             req.theme, req.restaurant_name, req.tagline, req.logo_data,
             req.show_price.map(|v| v as i64), req.show_tax.map(|v| v as i64), req.show_service_charge.map(|v| v as i64),
-            req.item_sort, req.modifiers_color
+            req.item_sort, req.modifiers_color, req.is_active.map(|v| v as i64)
         ])?;
         Ok(conn.last_insert_rowid())
     }
 
-    pub fn update_print_template(&self, id: i64, name: Option<String>, content: Option<String>, paper_size: Option<String>, label_width_mm: Option<f64>, label_height_mm: Option<f64>, theme: Option<String>, restaurant_name: Option<String>, tagline: Option<String>, logo_data: Option<String>, show_price: Option<bool>, show_tax: Option<bool>, show_service_charge: Option<bool>, item_sort: Option<String>, modifiers_color: Option<String>) -> Result<()> {
+    pub fn update_print_template(&self, id: i64, name: Option<String>, content: Option<String>, paper_size: Option<String>, label_width_mm: Option<f64>, label_height_mm: Option<f64>, theme: Option<String>, restaurant_name: Option<String>, tagline: Option<String>, logo_data: Option<String>, show_price: Option<bool>, show_tax: Option<bool>, show_service_charge: Option<bool>, item_sort: Option<String>, modifiers_color: Option<String>, is_active: Option<bool>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         if let Some(n) = name { conn.execute("UPDATE print_templates SET name = ?1, updated_at = datetime('now') WHERE id = ?2", params![n, id])?; }
         if let Some(c) = content { conn.execute("UPDATE print_templates SET content = ?1, updated_at = datetime('now') WHERE id = ?2", params![c, id])?; }
@@ -3160,6 +3172,7 @@ Ok(())
         if let Some(ss) = show_service_charge { conn.execute("UPDATE print_templates SET show_service_charge = ?1, updated_at = datetime('now') WHERE id = ?2", params![ss as i64, id])?; }
         if let Some(is) = item_sort { conn.execute("UPDATE print_templates SET item_sort = ?1, updated_at = datetime('now') WHERE id = ?2", params![is, id])?; }
         if let Some(mc) = modifiers_color { conn.execute("UPDATE print_templates SET modifiers_color = ?1, updated_at = datetime('now') WHERE id = ?2", params![mc, id])?; }
+        if let Some(ia) = is_active { conn.execute("UPDATE print_templates SET is_active = ?1, updated_at = datetime('now') WHERE id = ?2", params![ia as i64, id])?; }
         Ok(())
     }
 

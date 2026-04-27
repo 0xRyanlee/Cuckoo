@@ -7,8 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, ShoppingCart, Eye, Trash2, Truck, Package, FileBox } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { toast } from "sonner";
+import { parseSafeFloat } from "@/lib/utils";
 
 interface PurchaseOrder {
   id: number;
@@ -84,7 +87,7 @@ export function PurchaseOrdersPage({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "draft": return <Badge variant="outline">草稿</Badge>;
-      case "confirmed": return <Badge className="bg-blue-600">已確認</Badge>;
+      case "confirmed": return <Badge className="bg-blue-600">已确认</Badge>;
       case "received": return <Badge className="bg-emerald-600">已收貨</Badge>;
       case "cancelled": return <Badge variant="destructive">已取消</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;
@@ -95,16 +98,16 @@ export function PurchaseOrdersPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">採購管理</h2>
-          <p className="text-sm text-muted-foreground">管理採購單、收貨入庫</p>
+          <h2 className="text-2xl font-semibold tracking-tight">采购管理</h2>
+          <p className="text-sm text-muted-foreground">管理采购单、收货入库</p>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShoppingCart className="h-4 w-4" />採購單列表</CardTitle>
-            <CardDescription>共 {filteredOrders.length} 張採購單{filteredOrders.length !== orders.length ? `（篩選自 ${orders.length} 張）` : ""}</CardDescription>
+            <CardTitle className="flex items-center gap-2"><ShoppingCart className="h-4 w-4" />采购单列表</CardTitle>
+            <CardDescription>共 {filteredOrders.length} 张采购单{filteredOrders.length !== orders.length ? `（筛选自 ${orders.length} 张）` : ""}</CardDescription>
           </CardHeader>
           <CardContent>
             {filteredOrders.length === 0 ? (
@@ -151,12 +154,12 @@ export function PurchaseOrdersPage({
 
         <div className="space-y-4">
           <Card>
-            <CardHeader><CardTitle>新增採購單</CardTitle></CardHeader>
+            <CardHeader><CardTitle>新增采购单</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>供應商（可選）</Label>
                 <Select value={newSupplierId} onValueChange={setNewSupplierId}>
-                  <SelectTrigger><SelectValue placeholder="選擇供應商" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="选择供应商" /></SelectTrigger>
                   <SelectContent>
                     {suppliers.map((s) => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
                   </SelectContent>
@@ -173,7 +176,7 @@ export function PurchaseOrdersPage({
                 });
                 setNewSupplierId(""); setNewExpectedDate("");
               }}>
-                <Plus className="mr-2 h-4 w-4" />新增採購單
+                <Plus className="mr-2 h-4 w-4" />新增采购单
               </Button>
             </CardContent>
           </Card>
@@ -181,7 +184,7 @@ export function PurchaseOrdersPage({
           {selectedOrder && (
             <Card>
               <CardHeader>
-                <CardTitle>採購單詳情</CardTitle>
+                <CardTitle>采购单详情</CardTitle>
                 <CardDescription>{selectedOrder.order.po_no}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -213,12 +216,12 @@ export function PurchaseOrdersPage({
 
       <Dialog open={!!addItemPoId} onOpenChange={() => setAddItemPoId(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>添加採購材料</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>添加采购材料</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>材料</Label>
               <Select value={addItemMaterialId} onValueChange={setAddItemMaterialId}>
-                <SelectTrigger><SelectValue placeholder="選擇材料" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="选择材料" /></SelectTrigger>
                 <SelectContent>
                   {materials.map((m) => <SelectItem key={m.id} value={m.id.toString()}>{m.name} ({m.code})</SelectItem>)}
                 </SelectContent>
@@ -237,7 +240,7 @@ export function PurchaseOrdersPage({
             <div className="space-y-2">
               <Label>單位（可選）</Label>
               <Select value={addItemUnitId} onValueChange={setAddItemUnitId}>
-                <SelectTrigger><SelectValue placeholder="選擇單位" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="选择单位" /></SelectTrigger>
                 <SelectContent>
                   {units.map((u) => <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>)}
                 </SelectContent>
@@ -247,11 +250,20 @@ export function PurchaseOrdersPage({
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddItemPoId(null)}>取消</Button>
             <Button onClick={() => {
-              if (!addItemPoId || !addItemMaterialId) return;
-              const qty = parseFloat(addItemQty);
-              const cost = parseFloat(addItemCost);
-              if (isNaN(qty) || qty <= 0) return;
-              if (isNaN(cost) || cost < 0) return;
+              if (!addItemPoId || !addItemMaterialId) {
+                toast.error("请选择采购单和材料");
+                return;
+              }
+              const qty = parseSafeFloat(addItemQty);
+              const cost = parseSafeFloat(addItemCost);
+              if (qty === null || qty <= 0) {
+                toast.error("数量格式错误，请输入有效数字");
+                return;
+              }
+              if (cost === null || cost < 0) {
+                toast.error("单价格式错误，请输入有效数字");
+                return;
+              }
               onAddItem({
                 po_id: addItemPoId,
                 material_id: parseInt(addItemMaterialId),
@@ -287,12 +299,10 @@ export function PurchaseOrdersPage({
               />
             </div>
             <div className="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                id="autoBatch" 
+              <Checkbox
+                id="autoBatch"
                 checked={receiveAutoBatch}
-                onChange={(e) => setReceiveAutoBatch(e.target.checked)}
-                className="rounded"
+                onCheckedChange={(checked) => setReceiveAutoBatch(checked as boolean)}
               />
               <Label htmlFor="autoBatch" className="text-sm font-normal">自動為每項材料生成獨立批次</Label>
             </div>
@@ -305,7 +315,7 @@ export function PurchaseOrdersPage({
               }
               setReceivePoId(null);
             }}>
-              <Truck className="mr-2 h-4 w-4" />確認收貨
+              <Truck className="mr-2 h-4 w-4" />确认收货
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,7 +1,7 @@
 # Cuckoo 餐飲系統 - 開發進度追蹤
 
-> 更新日期：2026-04-23
-> 當前版本：v0.7.0（採購/生產/盤點/報表全模塊上線）
+> 更新日期：2026-04-28
+> 當前版本：v0.7.2（v5/v6 UI/UX 審計修復完成）
 > 技術棧：React 18 + TypeScript + Tauri 2 (Rust) + SQLite + shadcn/ui
 
 ---
@@ -19,15 +19,15 @@
 | 訂單管理 | ✅ 完成 | 92% | 搜索+篩選完成 |
 | KDS 廚顯 | ✅ 完成 | 88% | 穩定 |
 | 供應商 | ✅ 完成 | 92% | CRUD 完整 |
-| 打印系統 | ✅ 完成 | 85% | 自動觸發部分完成 |
+| 打印系統 | ✅ 完成 | 92% | 模板實時預覽 + DOMPurify + 狀態管理 |
 | 採購系統 | ✅ 完成 | 90% | 全流程 + 自動入庫 |
 | 生產系統 | ✅ 完成 | 90% | 全流程 + 自動扣料 |
 | 盤點系統 | ✅ 完成 | 90% | 全流程 + 差異調整 |
 | 報表系統 | ✅ 完成 | 85% | 四大報表上線 |
-| 加料/去料 | 🟡 開發中 | 70% | API 完成，待 UI |
+| 加料/去料 | ✅ 完成 | 100% | 訂單詳情 UI + useAppActions 統一管理 |
 | 小程序 | 🔴 未開始 | 0% | |
 
-**整體完成度：~82%**
+**整體完成度：~85%**
 
 ---
 
@@ -87,6 +87,9 @@
 | 3.8 | 打印任務隊列 | ✅ | 任務歷史 | 2 命令 | print_tasks | |
 | 3.9 | ESC/POS 構建器 | ✅ | -- | 完整 | -- | 對齊/加粗/切紙 |
 | 3.10 | TSPL 構建器 | ✅ | -- | 完整 | -- | 文字/條碼/邊框 |
+| 3.11 | 模板即時預覽 | ✅ | 400ms 防抖渲染 | `render_template_content_preview` | -- | 雙欄編輯-預覽佈局 |
+| 3.12 | XSS 防護 | ✅ | DOMPurify sanitization | -- | -- | `dangerouslySetInnerHTML` 全域保護 |
+| 3.13 | 模板啟用/停用 | ✅ | Checkbox UI | `is_active` 欄位 | `print_templates` | v0.7.1 新增 |
 
 ### Phase 4：採購與生產
 
@@ -106,9 +109,9 @@
 | 5.2 | 毛利報表 | ✅ | 收入/成本/毛利 | 1 命令 | -- | v0.7.0 新增 |
 | 5.3 | 原料消耗報表 | 🔴 | -- | -- | 可從 txns 計算 | |
 | 5.4 | 熱銷商品排行 | ✅ | Top 10 | 1 命令 | -- | v0.7.0 新增 |
-| 5.5 | 搜索功能 | 🟡 | 3/16 頁面 | -- | -- | 8 頁面待補 |
+| 5.5 | 搜索功能 | 🟡 | 5/16 頁面 | -- | -- | orders + materials + recipes + settings 完成 |
 | 5.6 | 通知系統 | 🔴 | Bell 圖標 | -- | -- | |
-| 5.7 | 加料/去料 | 🟡 | API 完成 | 3 命令 | 表已建 | 待 UI |
+| 5.7 | 加料/去料 | ✅ | 訂單詳情 UI | 3 命令 | 表已建 | 通過 useAppActions 統一管理 |
 | 5.8 | 配方公式 | 🔴 | -- | -- | 表已建 | |
 | 5.9 | 小程序接入 | 🔴 | -- | -- | -- | |
 
@@ -221,7 +224,6 @@
 ### P1 - 體驗優化（2-3 天）
 - [ ] 8 個頁面添加搜索過濾（inventory, menu, pos, suppliers, material-states, purchase-orders, production-orders, stocktakes）
 - [ ] Dashboard 圖表（銷售趨勢、庫存趨勢）
-- [ ] 加料/去料 UI（訂單詳情中添加/刪除 modifier）
 
 ### P2 - 功能補全（3-4 天）
 - [ ] recipe_formulas API + UI
@@ -241,7 +243,10 @@
 
 | 日期 | 版本 | 更新內容 |
 |------|------|----------|
-| 2026-04-23 | **v0.7.0** | **採購/生產/盤點/報表全模塊上線：+31 命令、+5 頁面、+1,868 Rust LOC、+4,595 TS LOC** |
+| 2026-04-28 | **v0.7.3 (Plan)**| **架構演進與 UX 規劃**：<br>• 確立「本地客戶端 + 阿里雲 SaaS / 微信小程序」平滑演進架構。<br>• 敲定配方系統 UX 方案二：**可展開樹狀表格 + 行內編輯**，全面向 Shadcn UI 規範收齊。<br>• 準備執行第三輪對抗性全局防呆與本地化修復。|
+| 2026-04-28 | **v0.7.2** | **UI/UX 審計第二波 + 浮點數安全強化：**<br>• UI 一致性：pos 菜品卡片 / app-header 通知按鈕改為 Shadcn Button<br>• 浮點數驗證：orders-page / pos-page / recipes-page / menu-page 全部使用 `parseSafeFloat()`，qty/wastage/qty_multiplier 阻斷提交，price 系列 warn + fallback<br>• 表單驗證：recipes-page wastage 需正數、menu-page 規格名稱非空<br>• toast 提示：所有無效輸入均有 sonner 提示 |
+| 2026-04-28 | **v0.7.1** | **UI/UX 審計修復 + 打印系統完善：**<br>• UI 一致性：4處原生 HTML 組件 → Shadcn<br>• 浮點數安全：`parseSafeFloat()` + toast 攔截 NaN<br>• XSS 防護：DOMPurify 全域淨化 `dangerouslySetInnerHTML`<br>• 架構統一：`inventory-page` / `orders-page` 直接 `invoke` 遷移到 `useAppActions`<br>• 打印模板：新增 `is_active` 控制 + toast 提示 + template_type 切換預覽<br>• 打印中心：Templates Tab 改為跳轉模板管理頁 |
+| 2026-04-28 | v0.7.0 | **採購/生產/盤點/報表全模塊上線：+31 命令、+5 頁面、+1,868 Rust LOC、+4,595 TS LOC** |
 | 2026-04-23 | v0.6.0 | 代碼審計 v6：79 命令、31 表、完整功能矩陣 |
 | 2026-04-23 | v0.5.1 | 打印模塊核心：Feie API + LAN TCP + ESC/POS + TSPL + 設置頁 |
 | 2026-04-23 | v0.5.0 | 菜單更新：22 款麻辣系列菜品 + 完整 CRUD |

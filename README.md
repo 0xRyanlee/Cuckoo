@@ -75,21 +75,26 @@ graph TB
         State -->|invoke()| Commands
         Commands --> DB
         Commands --> Printer
+        Commands --> Telemetry[📡 Telemetry & OTA Updater]
     end
     
     subgraph External["🔌 External"]
         Feie[Feie Cloud Printer]
         LAN[LAN Printers]
+        Cloud[☁️ Cloud Server / Webhook]
     end
     
     Printer -->|HTTP| Feie
     Printer -->|TCP| LAN
+    Telemetry -->|HTTPS| Cloud
     
     style Desktop fill:#0f172a,color:#fff
     style Frontend fill:#1e293b,color:#fff
     style Backend fill:#1e293b,color:#fff
     style External fill:#334155,color:#fff
 ```
+
+> **Arch Evolution Strategy (v1.2.1+)**: Cuckoo operates as a robust **Local-First** application (unaffected by internet outages). It includes a built-in Telemetry/Heartbeat system and Tauri Auto-Updater to allow remote owners to track operations and push silent updates. Future versions (v2.0) will introduce an optional Cloud SaaS sync.
 
 ---
 
@@ -425,28 +430,20 @@ gantt
     dateFormat  YYYY-MM
     axisFormat  %Y-%m
     
-    section v1.0 (Current)
+    section v1.0 - v1.2 (Current)
     Core CRUD              :done,    d1, 2026-01, 2026-03
     Recipe System          :done,    d2, 2026-02, 2026-03
     POS + Orders           :done,    d3, 2026-02, 2026-04
     KDS System             :done,    d4, 2026-03, 2026-04
     Inventory + Batches    :done,    d5, 2026-03, 2026-04
-    Reports                :done,    d6, 2026-04, 2026-04
     Print Engine           :done,    d7, 2026-04, 2026-04
-    
-    section v1.1
-    Print Optimization     :active,  p1, 2026-04, 2026-05
-    UI Polish              :active,  p2, 2026-04, 2026-05
-    Bug Fixes              :active,  p3, 2026-04, 2026-05
-    
-    section v1.2
-    Mini Program API       :         m1, 2026-05, 2026-06
-    Multi-store Support    :         m2, 2026-06, 2026-07
-    Data Export            :         m3, 2026-05, 2026-05
+    Tree-Table Recipes     :done,    r1, 2026-04, 2026-04
+    Telemetry System       :done,    r2, 2026-04, 2026-04
     
     section Future
+    Mini Program API       :         m3, 2026-05, 2026-06
+    Multi-store Support    :         m4, 2026-06, 2026-07
     Member System          :         f1, 2026-07, 2026-08
-    Coupon System          :         f2, 2026-07, 2026-08
     Cloud Sync             :         f3, 2026-08, 2026-10
 ```
 
@@ -454,9 +451,10 @@ gantt
 
 | Version / 版本 | Focus / 重點 | ETA / 預計 |
 |---------------|-------------|-----------|
-| **v1.0** | Core features complete | ✅ Current |
-| **v1.1** | Print optimization, UI polish | 2026-05 |
-| **v1.2** | Mini program, multi-store | 2026-07 |
+| **v1.0** | Core features complete | ✅ 2026-03 |
+| **v1.2.1** | Tree-Table Recipes & UI Refactoring | ✅ 2026-04 |
+| **v1.2.2** | Telemetry, Fool-proofing & Dependency Guard | ✅ 2026-04 |
+| **v1.3** | Mini program, Multi-store Alpha | 2026-07 |
 | **v2.0** | Cloud sync, mobile apps | 2026-Q4 |
 
 ---

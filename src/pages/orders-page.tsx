@@ -10,7 +10,8 @@ import { Plus, ShoppingCart, Eye, Send, X, Search, Filter, MinusCircle, PlusCirc
 import { EmptyState } from "@/components/ui/empty-state";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
+import { parseSafeFloat } from "@/lib/utils";
 
 interface OrderItem {
   id: number;
@@ -58,15 +59,16 @@ interface OrdersPageProps {
   menuItems: Record<number, string>;
   materials: Material[];
   onCreateOrder: () => void;
-  onSubmitOrder: (orderId: number) => void;
-  onCancelOrder: (orderId: number) => void;
-  onBatchCancelOrder?: (ids: number[]) => void;
-  onViewOrder: (orderId: number) => void;
+  onSubmitOrder: (id: number) => void;
+  onCancelOrder: (id: number) => void;
+  onBatchCancelOrder: (ids: number[]) => void;
+  onViewOrder: (id: number) => void;
+  onViewOrderWithModifiers: (id: number) => Promise<{ orderData: OrderWithItems; modifiers: Record<number, OrderItemModifier[]> }>;
   onAddModifier: (data: { order_item_id: number; modifier_type: string; material_id: number | null; qty: number; price_delta: number }) => void;
   onDeleteModifier: (modifier_id: number) => void;
   onLoadModifiers: (order_item_id: number) => Promise<OrderItemModifier[]>;
-  onLoadMore?: () => void;
-  hasMore?: boolean;
+  onLoadMore: () => void;
+  hasMore: boolean;
   searchQuery?: string;
 }
 
@@ -80,6 +82,7 @@ export function OrdersPage({
   onCancelOrder,
   onBatchCancelOrder,
   onViewOrder,
+  onViewOrderWithModifiers,
   onAddModifier,
   onDeleteModifier,
   onLoadModifiers,
@@ -162,7 +165,7 @@ export function OrdersPage({
                 </CardTitle>
                 <CardDescription>共 {filteredOrders.length} 个订单{filteredOrders.length !== orders.length ? `（筛选自 ${orders.length} 个）` : ""}</CardDescription>
               </div>
-              {selectedOrders.length > 0 && onBatchCancelOrder && (
+              {selectedOrders.length > 0 && (
                 <div className="flex gap-2">
                   <span className="text-sm text-muted-foreground self-center">已选 {selectedOrders.length} 单</span>
                   <Button size="sm" variant="outline" onClick={handleBatchCancel}>批量取消</Button>
@@ -225,7 +228,7 @@ export function OrdersPage({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={async () => { onViewOrder(order.id); const orderData = await invoke<OrderWithItems>("get_order_with_items", { orderId: order.id }); const mods: Record<number, OrderItemModifier[]> = {}; for (const item of orderData.items) { try { mods[item.id] = await onLoadModifiers(item.id); } catch { mods[item.id] = []; } } setItemModifiers(mods); }}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={async () => { onViewOrder(order.id); const { orderData } = await onViewOrderWithModifiers(order.id); const mods: Record<number, OrderItemModifier[]> = {}; for (const item of orderData.items) { try { mods[item.id] = await onLoadModifiers(item.id); } catch { mods[item.id] = []; } } setItemModifiers(mods); }}>
                             <Eye className="h-4 w-4" />
                           </Button>
                           {order.status === "pending" && (
@@ -247,7 +250,7 @@ export function OrdersPage({
             )}
             {hasMore && onLoadMore && (
               <div className="flex justify-center pt-2 pb-4">
-                <Button variant="outline" size="sm" onClick={onLoadMore}>載入更多訂單</Button>
+                <Button variant="outline" size="sm" onClick={onLoadMore}>载入更多订单</Button>
               </div>
             )}
           </CardContent>
@@ -334,7 +337,7 @@ export function OrdersPage({
             <div className="space-y-2">
               <Label>材料</Label>
               <Select value={modifierMaterialId} onValueChange={setModifierMaterialId}>
-                <SelectTrigger><SelectValue placeholder="選擇材料" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="选择材料" /></SelectTrigger>
                 <SelectContent>
                   {materials.map((m) => <SelectItem key={m.id} value={m.id.toString()}>{m.name} ({m.code})</SelectItem>)}
                 </SelectContent>
@@ -354,16 +357,27 @@ export function OrdersPage({
           <DialogFooter>
             <Button variant="outline" onClick={() => setModifierDialogOpen(false)}>取消</Button>
             <Button onClick={() => {
-              if (modifierOrderItemId && modifierMaterialId) {
-                onAddModifier({
-                  order_item_id: modifierOrderItemId,
-                  modifier_type: modifierType,
-                  material_id: parseInt(modifierMaterialId),
-                  qty: parseFloat(modifierQty) || 1,
-                  price_delta: parseFloat(modifierPriceDelta) || 0,
-                });
-                setModifierDialogOpen(false);
+              if (!modifierOrderItemId || !modifierMaterialId) {
+                toast.error("请选择材料和数量");
+                return;
               }
+              const qty = parseSafeFloat(modifierQty);
+              if (qty === null || qty <= 0) {
+                toast.error("数量格式错误");
+                return;
+              }
+              const priceDelta = parseSafeFloat(modifierPriceDelta);
+              if (priceDelta === null) {
+                toast("價格調整已設為 0（元）", { icon: "⚠️" });
+              }
+              onAddModifier({
+                order_item_id: modifierOrderItemId,
+                modifier_type: modifierType,
+                material_id: parseInt(modifierMaterialId),
+                qty,
+                price_delta: priceDelta ?? 0,
+              });
+              setModifierDialogOpen(false);
             }}>確認</Button>
           </DialogFooter>
         </DialogContent>

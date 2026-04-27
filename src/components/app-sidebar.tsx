@@ -50,7 +50,7 @@ const navGroups = [
 {
     label: "系統",
     items: [
-      { id: "attributes", label: "屬性模板", icon: SlidersHorizontal },
+      { id: "attributes", label: "属性模板", icon: SlidersHorizontal },
       { id: "print-templates", label: "打印中心", icon: Printer },
       { id: "reports", label: "數據報表", icon: BarChart3 },
       { id: "settings", label: "設置", icon: Settings },

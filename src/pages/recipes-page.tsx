@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ChefHat, Trash2, Pencil, Save, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
+import { Plus, ChefHat, Trash2, Pencil, Save, X, ChevronRight, ChevronDown } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { toast } from "sonner";
+import { parseSafeFloat } from "@/lib/utils";
+import { invoke } from "@tauri-apps/api/core";
 
 interface Recipe {
   id: number;
@@ -75,6 +78,7 @@ interface RecipesPageProps {
   onUpdateRecipe: (id: number, name: string, output_qty: number) => void;
   onAddRecipeItem: (recipe_id: number, item_type: string, ref_id: number, qty: number, unit_id: number, wastage_rate: number) => void;
   onDeleteRecipeItem: (item_id: number, recipe_id: number) => void;
+  onUpdateRecipeItem: (item_id: number, recipe_id: number, qty: number, wastage_rate: number) => void;
   onRecalculateCost: (recipe_id: number) => void;
   searchQuery?: string;
 }
@@ -91,6 +95,7 @@ export function RecipesPage({
   onUpdateRecipe,
   onAddRecipeItem,
   onDeleteRecipeItem,
+  onUpdateRecipeItem,
   onRecalculateCost,
   searchQuery,
 }: RecipesPageProps) {
@@ -106,14 +111,116 @@ export function RecipesPage({
   const [editRecipeName, setEditRecipeName] = useState("");
   const [editRecipeOutputQty, setEditRecipeOutputQty] = useState("");
 
-  const [addItemRecipeId, setAddItemRecipeId] = useState<number | null>(null);
-  const [addItemType, setAddItemType] = useState<"material" | "sub_recipe">("material");
-  const [addItemMaterial, setAddItemMaterial] = useState("");
-  const [addItemQty, setAddItemQty] = useState("");
-  const [addItemUnit, setAddItemUnit] = useState("");
-  const [addItemWastage, setAddItemWastage] = useState("0");
-
   const [deleteItemConfirm, setDeleteItemConfirm] = useState<number | null>(null);
+  const [deleteRecipeConfirm, setDeleteRecipeConfirm] = useState<number | null>(null);
+
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set<number>());
+  const [subRecipes, setSubRecipes] = useState<Record<number, RecipeItem[]>>({});
+
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editingItemQty, setEditingItemQty] = useState("");
+  const [editingItemWastage, setEditingItemWastage] = useState("");
+
+  const [quickAddRecipeId, setQuickAddRecipeId] = useState<number | null>(null);
+  const [quickAddMaterial, setQuickAddMaterial] = useState("");
+  const [quickAddQty, setQuickAddQty] = useState("");
+  const [quickAddUnit, setQuickAddUnit] = useState("");
+  const [quickAddWastage, setQuickAddWastage] = useState("0");
+
+  async function toggleExpand(refId: number) {
+    if (expandedItems.has(refId)) {
+      setExpandedItems((prev) => {
+        const next = new Set(prev);
+        next.delete(refId);
+        return next;
+      });
+    } else {
+      if (!subRecipes[refId]) {
+        try {
+          const data = await invoke<RecipeWithItems>("get_recipe_with_items", { id: refId });
+          setSubRecipes((prev) => ({ ...prev, [refId]: data.items }));
+        } catch (e) {
+          toast.error("加载子配方明细失败");
+          return;
+        }
+      }
+      setExpandedItems((prev) => {
+        const next = new Set(prev);
+        next.add(refId);
+        return next;
+      });
+    }
+  }
+
+  function startEditItem(item: RecipeItem) {
+    setEditingItemId(item.id);
+    setEditingItemQty(item.qty.toString());
+    setEditingItemWastage((item.wastage_rate * 100).toString());
+  }
+
+  function saveEditItem() {
+    if (!editingItemId || !selectedRecipe) return;
+    const qty = parseSafeFloat(editingItemQty);
+    const wastage = parseSafeFloat(editingItemWastage);
+    if (qty === null || qty <= 0) {
+      toast.error("数量必须大于 0");
+      return;
+    }
+    if (wastage !== null && wastage < 0) {
+      toast.error("损耗率不能为负数");
+      return;
+    }
+
+    const currentItem = selectedRecipe.items.find(i => i.id === editingItemId);
+    if (currentItem?.item_type === "sub_recipe") {
+      try {
+        const count = await invoke<number>("get_recipe_usage_count", { recipeId: currentItem.ref_id });
+        if (count > 0) {
+          if (!confirm(`此半成品被 ${count} 個其他配方引用，修改其用量或損耗將影響所有相關成本，確定修改嗎？`)) {
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("檢查依賴失敗", e);
+      }
+    }
+
+    onUpdateRecipeItem(editingItemId, selectedRecipe.recipe.id, qty, wastage ?? 0);
+    setEditingItemId(null);
+    onRecalculateCost(selectedRecipe.recipe.id);
+  }
+
+  function openQuickAdd(recipeId: number) {
+    setQuickAddRecipeId(recipeId);
+    setQuickAddMaterial("");
+    setQuickAddQty("");
+    setQuickAddUnit("");
+    setQuickAddWastage("0");
+  }
+
+  function saveQuickAdd() {
+    if (!quickAddRecipeId || !quickAddMaterial || !quickAddQty || !quickAddUnit) {
+      toast.error("请填写必填字段");
+      return;
+    }
+    const qty = parseSafeFloat(quickAddQty);
+    const wastage = parseSafeFloat(quickAddWastage);
+    if (qty === null || qty <= 0) {
+      toast.error("数量必须大于 0");
+      return;
+    }
+    const isMaterial = quickAddMaterial.startsWith("m_");
+    const refId = parseInt(quickAddMaterial.substring(2));
+    onAddRecipeItem(
+      quickAddRecipeId,
+      isMaterial ? "material" : "sub_recipe",
+      refId,
+      qty,
+      parseInt(quickAddUnit),
+      wastage ?? 0,
+    );
+    setQuickAddRecipeId(null);
+  }
 
   function openEditRecipe(recipe: Recipe) {
     setEditRecipeId(recipe.id);
@@ -121,34 +228,22 @@ export function RecipesPage({
     setEditRecipeOutputQty(recipe.output_qty.toString());
   }
 
-  function saveEditRecipe() {
+  async function saveEditRecipe() {
     if (!editRecipeId) return;
+    
+    try {
+      const count = await invoke<number>("get_recipe_usage_count", { recipeId: editRecipeId });
+      if (count > 0) {
+        if (!confirm(`此配方作為半成品被 ${count} 個其他配方引用，修改名稱或產出量將直接影響它們的成本核算，確定執行嗎？`)) {
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("檢查依賴失敗", e);
+    }
+
     onUpdateRecipe(editRecipeId, editRecipeName, parseFloat(editRecipeOutputQty) || 1);
     setEditRecipeId(null);
-  }
-
-  function openAddItem(recipeId: number) {
-    setAddItemRecipeId(recipeId);
-    setAddItemType("material");
-    setAddItemMaterial("");
-    setAddItemQty("");
-    setAddItemUnit("");
-    setAddItemWastage("0");
-  }
-
-  function saveAddItem() {
-    if (!addItemRecipeId || !addItemMaterial || !addItemQty || !addItemUnit) return;
-    const qty = parseFloat(addItemQty);
-    if (isNaN(qty) || qty <= 0) return;
-    onAddRecipeItem(
-      addItemRecipeId,
-      addItemType,
-      parseInt(addItemMaterial),
-      qty,
-      parseInt(addItemUnit),
-      parseFloat(addItemWastage) || 0,
-    );
-    setAddItemRecipeId(null);
   }
 
   function getRefName(itemType: string, refId: number): string {
@@ -161,6 +256,44 @@ export function RecipesPage({
 
   function getUnitName(unitId: number): string {
     return units.find((u) => u.id === unitId)?.name || `單位 #${unitId}`;
+  }
+
+  function renderSubItems(subRecipeId: number, depth: number = 1): React.ReactNode {
+    if (depth > 5) return <div className="text-destructive text-xs py-1">超过最大展开深度，存在循环依赖风险</div>;
+    const items = subRecipes[subRecipeId];
+    if (!items) return <div className="text-muted-foreground text-xs py-1 px-4">加载中...</div>;
+    if (items.length === 0) return <div className="text-muted-foreground text-xs py-1 px-4">空配方</div>;
+    
+    return (
+      <div className="space-y-1">
+        {items.map(item => {
+          const hasSub = item.item_type === "sub_recipe";
+          const isExpanded = expandedItems.has(item.ref_id);
+          return (
+            <div key={item.id} className="flex flex-col border-b last:border-0 border-muted/30 py-1">
+              <div className="flex items-center text-sm">
+                <div className="flex-1 flex items-center gap-1">
+                  {hasSub ? (
+                    <Button variant="ghost" size="icon" className="h-4 w-4 p-0 mr-1" onClick={() => toggleExpand(item.ref_id)}>
+                      {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    </Button>
+                  ) : <span className="w-5 inline-block" />}
+                  {hasSub && <Badge variant="outline" className="mr-1 text-[10px] px-1 py-0 h-4">半成品</Badge>}
+                  {getRefName(item.item_type, item.ref_id)}
+                </div>
+                <div className="w-24 text-right text-muted-foreground mr-[5.5rem]">{item.qty} {getUnitName(item.unit_id)}</div>
+                <div className="w-24 text-right text-muted-foreground mr-[7.5rem]">{item.wastage_rate}%</div>
+              </div>
+              {hasSub && isExpanded && (
+                <div className="pl-6 mt-1 border-l-2 border-muted/50 ml-2">
+                  {renderSubItems(item.ref_id, depth + 1)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   return (
@@ -214,8 +347,7 @@ export function RecipesPage({
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => onViewRecipe(r)}>查看</Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditRecipe(r)}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAddItem(r.id)}><Plus className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onDeleteRecipe(r.id)}><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteRecipeConfirm(r.id)}><Trash2 className="h-4 w-4" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -253,7 +385,6 @@ export function RecipesPage({
               <span>配方详情: {selectedRecipe.recipe.name}</span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => onRecalculateCost(selectedRecipe.recipe.id)}>重新计算成本</Button>
-                <Button variant="outline" size="sm" onClick={() => openAddItem(selectedRecipe.recipe.id)}><Plus className="mr-1 h-3 w-3" />添加材料</Button>
               </div>
             </CardTitle>
             <CardDescription>代码: {selectedRecipe.recipe.code} | 类型: {selectedRecipe.recipe.recipe_type} | 产出: {selectedRecipe.recipe.output_qty}</CardDescription>
@@ -261,37 +392,122 @@ export function RecipesPage({
           <CardContent>
             <div className="grid gap-6 md:grid-cols-2">
               <div>
-                <h3 className="font-medium mb-3">配方明细 ({selectedRecipe.items.length} 项)</h3>
+                <h3 className="font-medium mb-3">配方明细 ({selectedRecipe.items.length} 项)
+                  <Button variant="ghost" size="sm" className="ml-2 h-6 px-2" onClick={() => openQuickAdd(selectedRecipe.recipe.id)}>
+                    <Plus className="h-3 w-3 mr-1" />快捷添加
+                  </Button>
+                </h3>
                 {selectedRecipe.items.length === 0 ? (
                   <EmptyState icon={ChefHat} title="暂无明细" description="点击添加材料开始" />
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-8"></TableHead>
                         <TableHead>原料 / 半成品</TableHead>
-                        <TableHead className="text-right">用量</TableHead>
-                        <TableHead className="text-right">損耗率</TableHead>
-                        <TableHead className="text-right">操作</TableHead>
+                        <TableHead className="text-right w-32">用量</TableHead>
+                        <TableHead className="text-right w-24">损耗率</TableHead>
+                        <TableHead className="text-right w-20">操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedRecipe.items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">
-                            {item.item_type === "sub_recipe" && <Badge variant="outline" className="mr-1 text-xs">半成品</Badge>}
-                            {getRefName(item.item_type, item.ref_id)}
-                          </TableCell>
-                          <TableCell className="text-right">{item.qty} {getUnitName(item.unit_id)}</TableCell>
-                          <TableCell className="text-right">{(item.wastage_rate * 100).toFixed(1)}%</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteItemConfirm(item.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {selectedRecipe.items.map((item) => {
+                        const hasSubItems = item.item_type === "sub_recipe";
+                        const isExpanded = expandedItems.has(item.ref_id);
+                        return (
+                          <Fragment key={item.id}>
+                            <TableRow>
+                              <TableCell className="p-2">
+                                {hasSubItems && (
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpand(item.ref_id)}>
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </Button>
+                                )}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {item.item_type === "sub_recipe" && <Badge variant="outline" className="mr-1 text-xs">半成品</Badge>}
+                                {getRefName(item.item_type, item.ref_id)}
+                              </TableCell>
+                              {editingItemId === item.id ? (
+                                <>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Input className="h-7 w-20 text-right" type="number" value={editingItemQty} onChange={(e) => setEditingItemQty(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEditItem()} />
+                                      <span className="text-xs text-muted-foreground">{getUnitName(item.unit_id)}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Input className="h-7 w-16 text-right" type="number" value={editingItemWastage} onChange={(e) => setEditingItemWastage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEditItem()} />
+                                      <span className="text-xs text-muted-foreground">%</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={saveEditItem}><Save className="h-3.5 w-3.5" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingItemId(null)}><X className="h-3.5 w-3.5" /></Button>
+                                    </div>
+                                  </TableCell>
+                                </>
+                              ) : (
+                                <>
+                                  <TableCell className="text-right cursor-pointer hover:bg-muted" onClick={() => startEditItem(item)}>
+                                    {item.qty} {getUnitName(item.unit_id)}
+                                  </TableCell>
+                                  <TableCell className="text-right cursor-pointer hover:bg-muted" onClick={() => startEditItem(item)}>
+                                    {(item.wastage_rate * 100).toFixed(1)}%
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-1">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditItem(item)}><Pencil className="h-3.5 w-3.5" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteItemConfirm(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                                    </div>
+                                  </TableCell>
+                                </>
+                              )}
+                            </TableRow>
+                            {hasSubItems && isExpanded && (
+                              <TableRow className="bg-muted/30">
+                                <TableCell colSpan={5} className="p-0 pl-10 border-l-[3px] border-l-primary/30">
+                                  <div className="py-2 pr-4 bg-muted/10">
+                                    {renderSubItems(item.ref_id)}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                     </TableBody>
                   </Table>
+                )}
+                {quickAddRecipeId === selectedRecipe.recipe.id && (
+                  <div className="flex items-center gap-2 mt-2 p-2 border rounded-md bg-muted/30">
+                    <Select value={quickAddMaterial} onValueChange={setQuickAddMaterial}>
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="选择材料 / 半成品" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>原材料</SelectLabel>
+                          {materials.map((m) => <SelectItem key={`m_${m.id}`} value={`m_${m.id}`}>{m.name}</SelectItem>)}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>半成品(子配方)</SelectLabel>
+                          {recipes.filter((r) => r.id !== quickAddRecipeId).map((r) => <SelectItem key={`r_${r.id}`} value={`r_${r.id}`}>{r.name}</SelectItem>)}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Input className="w-24" type="number" placeholder="用量" value={quickAddQty} onChange={(e) => setQuickAddQty(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveQuickAdd()} />
+                    <Select value={quickAddUnit} onValueChange={setQuickAddUnit}>
+                      <SelectTrigger className="w-24"><SelectValue placeholder="单位" /></SelectTrigger>
+                      <SelectContent>
+                        {units.map((u) => <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input className="w-16" type="number" placeholder="0" value={quickAddWastage} onChange={(e) => setQuickAddWastage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveQuickAdd()} />
+                    <span className="text-xs text-muted-foreground">%</span>
+                    <Button size="sm" onClick={saveQuickAdd} disabled={!quickAddMaterial || !quickAddQty || !quickAddUnit}><Save className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => setQuickAddRecipeId(null)}><X className="h-4 w-4" /></Button>
+                  </div>
                 )}
               </div>
               {recipeCost && (
@@ -313,14 +529,23 @@ export function RecipesPage({
                     <Separator />
                     {recipeCost.items && recipeCost.items.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium mb-2">明细成本</h4>
-                        <div className="space-y-1">
-                          {recipeCost.items.map((ci, i) => (
-                            <div key={i} className="flex items-center justify-between text-sm py-1">
-                              <span className="text-muted-foreground">{ci.material_name}</span>
-                              <span className="font-mono">¥{ci.line_cost.toFixed(2)}</span>
-                            </div>
-                          ))}
+                        <h4 className="text-sm font-medium mb-2">成本明细</h4>
+                        <div className="space-y-2">
+                          {recipeCost.items.map((ci, i) => {
+                            const pct = recipeCost.total_cost > 0 ? (ci.line_cost / recipeCost.total_cost) * 100 : 0;
+                            const barColor = pct > 50 ? "bg-red-500" : pct > 20 ? "bg-amber-500" : "bg-green-500";
+                            return (
+                              <div key={i}>
+                                <div className="flex items-center justify-between text-sm py-1">
+                                  <span className="text-muted-foreground flex-1 truncate">{ci.material_name}</span>
+                                  <span className="font-mono ml-2">¥{ci.line_cost.toFixed(2)} ({pct.toFixed(1)}%)</span>
+                                </div>
+                                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                  <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -332,63 +557,7 @@ export function RecipesPage({
         </Card>
       )}
 
-      <Dialog open={!!addItemRecipeId} onOpenChange={() => setAddItemRecipeId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>添加配方明細</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>類型</Label>
-              <div className="flex gap-2">
-                <Button size="sm" variant={addItemType === "material" ? "default" : "outline"} onClick={() => { setAddItemType("material"); setAddItemMaterial(""); }}>原材料</Button>
-                <Button size="sm" variant={addItemType === "sub_recipe" ? "default" : "outline"} onClick={() => { setAddItemType("sub_recipe"); setAddItemMaterial(""); }}>半成品（子配方）</Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{addItemType === "sub_recipe" ? "子配方" : "材料"}</Label>
-              <Select value={addItemMaterial} onValueChange={setAddItemMaterial}>
-                <SelectTrigger><SelectValue placeholder={addItemType === "sub_recipe" ? "選擇子配方" : "選擇材料"} /></SelectTrigger>
-                <SelectContent>
-                  {addItemType === "sub_recipe"
-                    ? recipes.filter((r) => r.id !== addItemRecipeId).map((r) => (
-                        <SelectItem key={r.id} value={r.id.toString()}>{r.name} ({r.code})</SelectItem>
-                      ))
-                    : materials.map((m) => (
-                        <SelectItem key={m.id} value={m.id.toString()}>{m.name} ({m.code})</SelectItem>
-                      ))
-                  }
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>用量</Label>
-                <Input type="number" value={addItemQty} onChange={(e) => setAddItemQty(e.target.value)} placeholder="0.0" min="0.001" step="0.001" />
-              </div>
-              <div className="space-y-2">
-                <Label>單位</Label>
-                <Select value={addItemUnit} onValueChange={setAddItemUnit}>
-                  <SelectTrigger><SelectValue placeholder="選擇單位" /></SelectTrigger>
-                  <SelectContent>
-                    {units.map((u) => (
-                      <SelectItem key={u.id} value={u.id.toString()}>{u.name} ({u.code})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>損耗率 (%)</Label>
-              <Input type="number" value={addItemWastage} onChange={(e) => setAddItemWastage(e.target.value)} placeholder="0" min="0" max="100" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddItemRecipeId(null)}>取消</Button>
-            <Button onClick={saveAddItem} disabled={!addItemMaterial || !addItemQty || !addItemUnit}>添加</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       <Dialog open={!!deleteItemConfirm} onOpenChange={() => setDeleteItemConfirm(null)}>
         <DialogContent>
@@ -399,6 +568,19 @@ export function RecipesPage({
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteItemConfirm(null)}>取消</Button>
             <Button variant="destructive" onClick={() => { if (deleteItemConfirm && selectedRecipe) { onDeleteRecipeItem(deleteItemConfirm, selectedRecipe.recipe.id); } setDeleteItemConfirm(null); }}>删除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteRecipeConfirm} onOpenChange={() => setDeleteRecipeConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除配方</DialogTitle>
+          </DialogHeader>
+          <p className="py-4 text-sm text-muted-foreground">确定要删除此配方吗？此操作不可撤销，将同时删除所有关联的配方明细。</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteRecipeConfirm(null)}>取消</Button>
+            <Button variant="destructive" onClick={() => { if (deleteRecipeConfirm) { onDeleteRecipe(deleteRecipeConfirm); } setDeleteRecipeConfirm(null); }}>删除</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

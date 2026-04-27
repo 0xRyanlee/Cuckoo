@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
+import { parseSafeFloat } from "@/lib/utils";
 import { Plus, Minus, ShoppingCart, Send, X, MessageSquare, Tag, FileText } from "lucide-react";
 
 function formatPrice(price: number): string {
@@ -289,11 +291,10 @@ export function POSPage({
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {filteredItems.map((item, i) => (
-                      <button
+                      <Button
                         key={item.id}
-                        role="button"
-                        tabIndex={0}
-                        className="group relative flex flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left transition-all hover:border-primary hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none animate-stagger"
+                        variant="ghost"
+                        className="group relative flex flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left transition-all hover:border-primary hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none animate-stagger h-auto"
                         style={{ animationDelay: `${i * 30}ms` }}
                         onClick={() => item.is_available && openSpecDialog(item)}
                         disabled={!item.is_available}
@@ -307,7 +308,7 @@ export function POSPage({
                         <span className="text-lg font-bold text-primary">
                           {formatPrice(item.sales_price)}
                         </span>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                   {filteredItems.length === 0 && (
@@ -429,7 +430,12 @@ export function POSPage({
         <div className="p-4 space-y-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">合计</span>
-            <span className="text-2xl font-bold text-primary">{formatPrice(cartTotal)}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { if (cart.length > 0 && confirm("确定要清空购物车吗？")) clearCart(); }} disabled={cart.length === 0} className="text-muted-foreground hover:text-destructive">
+                清空
+              </Button>
+              <span className="text-2xl font-bold text-primary">{formatPrice(cartTotal)}</span>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button
@@ -558,9 +564,9 @@ export function POSPage({
                       <Badge key={idx} variant="secondary" className="flex items-center gap-1">
                         {mod.modifier_type}
                         {mod.price_delta !== 0 && ` (${mod.price_delta > 0 ? "+" : ""}${mod.price_delta})`}
-                        <button onClick={() => removeModifier(currentCartItemIndex, idx)} className="ml-1 hover:text-destructive">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={() => removeModifier(currentCartItemIndex, idx)}>
                           <X className="h-3 w-3" />
-                        </button>
+                        </Button>
                       </Badge>
                     ))}
                   </div>
@@ -591,8 +597,12 @@ export function POSPage({
                       if (e.key === "Enter") {
                         const nameInput = document.getElementById("mod-name") as HTMLInputElement;
                         const priceInput = document.getElementById("mod-price") as HTMLInputElement;
-                        if (nameInput.value) {
-                          addModifier({ modifier_type: nameInput.value, qty: 1, price_delta: parseFloat(priceInput.value) || 0 });
+                        if (nameInput.value.trim()) {
+                          const priceDelta = parseSafeFloat(priceInput.value);
+                          if (priceDelta === null) {
+                            toast("价格调整无效，已设为 0", { icon: "⚠️" });
+                          }
+                          addModifier({ modifier_type: nameInput.value.trim(), qty: 1, price_delta: priceDelta ?? 0 });
                           nameInput.value = "";
                           priceInput.value = "";
                         }
@@ -600,7 +610,7 @@ export function POSPage({
                     }}
                   />
                   <Input
-                    placeholder="價格"
+                    placeholder="价格"
                     id="mod-price"
                     type="number"
                     className="w-20"

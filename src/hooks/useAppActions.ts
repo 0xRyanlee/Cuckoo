@@ -113,6 +113,10 @@ export function useAppActions({
     try { await invoke("delete_recipe_item", { itemId: item_id }); toast.success("配方项已删除"); } catch (e) { toast.error("删除配方项失败", { description: String(e) }); }
   };
 
+  const handleUpdateRecipeItem = async (item_id: number, qty: number, wastage_rate: number) => {
+    try { await invoke("update_recipe_item", { itemId: item_id, qty, wastageRate: wastage_rate }); toast.success("配方项已更新"); } catch (e) { toast.error("更新配方项失败", { description: String(e) }); }
+  };
+
   const handleRecalculateCost = async (id: number) => {
     try { const cost = await invoke<RecipeCostResult>("calculate_recipe_cost", { recipeId: id }); setRecipeCost(cost); } catch (e) { toast.error("计算成本失败", { description: String(e) }); }
   };
@@ -151,8 +155,8 @@ export function useAppActions({
   };
 
   // 訂單
-  const handleCreateOrder = async () => {
-    try { await invoke("create_order", { req: { source: "pos", dine_type: "dine_in", table_no: null } }); toast.success("订单已创建"); loadData(); } catch (e) { toast.error("创建订单失败", { description: String(e) }); }
+  const handleCreateOrder = async (dineType: string = "dine_in", tableNo: string | null = null) => {
+    try { await invoke("create_order", { req: { source: "pos", dine_type: dineType, table_no: tableNo } }); toast.success("订单已创建"); loadData(); } catch (e) { toast.error("创建订单失败", { description: String(e) }); }
   };
 
   const handlePOSAndSubmit = async (cart: POSCartItem[], dineType: string = "dine_in", tableNo: string | null = null) => {
@@ -206,7 +210,7 @@ export function useAppActions({
       const more = await invoke<Order[]>("get_orders", { limit: 200, offset: orders.length });
       setOrders((prev) => [...prev, ...more]);
       setOrdersHasMore(more.length === 200);
-    } catch (e) { toast.error("載入訂單失敗", { description: String(e) }); }
+    } catch (e) { toast.error("加载订单失败", { description: String(e) }); }
   };
 
   const handleBatchCancelOrder = async (ids: number[]) => {
@@ -398,7 +402,7 @@ export function useAppActions({
   };
 
   // 訂單修改器
-  const handleAddModifier = async (data: { order_item_id: number; modifier_type: string; material_id?: number; qty: number; price_delta: number }) => {
+  const handleAddModifier = async (data: { order_item_id: number; modifier_type: string; material_id: number | null; qty: number; price_delta: number }) => {
     try { await invoke("add_order_item_modifier", { req: data }); toast.success("加料已添加"); } catch (e) { toast.error("添加加料失败", { description: String(e) }); }
   };
 
@@ -410,13 +414,17 @@ export function useAppActions({
     return await invoke<OrderItemModifier[]>("get_order_item_modifiers", { orderItemId: order_item_id });
   };
 
+  const handleReportTelemetry = async (payload: { client_id: string; version: string; uptime_hours: number; today_sales: number; today_orders: number }, webhookUrl?: string) => {
+    try { await invoke("report_telemetry", { payload, webhookUrl: webhookUrl || null }); } catch (e) { console.error("telemetry failed:", e); }
+  };
+
   return {
     // 材料
     handleCreateMaterial, handleUpdateMaterial, handleDeleteMaterial, handleRemoveMaterialTag,
     // 分類與標籤
     handleCreateCategory, handleDeleteCategory, handleCreateTag, handleDeleteTag,
     // 配方
-    handleCreateRecipe, handleViewRecipe, handleDeleteRecipe, handleUpdateRecipe, handleAddRecipeItem, handleDeleteRecipeItem, handleRecalculateCost,
+    handleCreateRecipe, handleViewRecipe, handleDeleteRecipe, handleUpdateRecipe, handleAddRecipeItem, handleDeleteRecipeItem, handleUpdateRecipeItem, handleRecalculateCost,
     // 菜單
     handleCreateMenuCategory, handleUpdateMenuCategory, handleDeleteMenuCategory, handleCreateMenuItem, handleToggleMenuItem, handleBatchToggleMenuItem, handleUpdateMenuItem, handleDeleteMenuItem,
     // 訂單
@@ -439,5 +447,7 @@ export function useAppActions({
     handleLoadKDS, handleFinishTicket,
     // 訂單修改器
     handleAddModifier, handleDeleteModifier, handleLoadModifiers,
+    // 遙測
+    handleReportTelemetry,
   };
 }
