@@ -562,7 +562,7 @@ dependencies = [
 
 [[package]]
 name = "cuckoo"
-version = "1.0.0"
+version = "1.2.2"
 dependencies = [
  "chrono",
  "dirs 5.0.1",

@@ -45,11 +45,9 @@
 | 🏭 **Semi-finished Products** — Production orders with yield tracking | 🏭 **半成品管理** — 生產單與產出追蹤 |
 | 💻 **POS System** — Cart, specs, modifiers, order submission | 💻 **POS 點單** — 購物車、規格、加料、提交 |
 | 🖥 **Kitchen Display (KDS)** — Station-based ticket workflow | 🖥 **廚房顯示 (KDS)** — 工作站工單流程 |
-| 🛒 **Purchase Orders** — PO → Receive → Batch generation | 🛒 **採購訂單** — 採購→入庫→批次生成 |
-| 📊 **Reports** — Sales, gross profit, consumption analytics | 📊 **報表分析** — 銷售、毛利、消耗分析 |
-| 🖨 **Print Support** — ESC/POS, Feie cloud, LAN printers | 🖨 **打印支持** — ESC/POS、飛鵝雲、局域網打印 |
-| 📋 **Stocktake** — Inventory counting with variance calculation | 📋 **盤點管理** — 庫存盤點與差異計算 |
-| 🔔 **Alert System** — Low stock & expiry notifications | 🔔 **預警系統** — 低庫存與效期提醒 |
+| 📊 **Real-time Analytics** — Sales, gross profit, and consumption | 📊 **實時報表** — 銷售、毛利、消耗分析 |
+| 🛡 **Dependency Guard** — Prevent deletion of recipes in use (v1.2.2) | 🛡 **引用保護** — 防止刪除/修改使用中的配方 (v1.2.2) |
+| 📡 **Remote Telemetry** — Heartbeat & Error tracking for owners (v1.2.2) | 📡 **遠程監測** — 支持心跳與報錯遠程追蹤 (v1.2.2) |
 
 ---
 
