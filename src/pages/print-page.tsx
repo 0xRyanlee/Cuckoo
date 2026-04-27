@@ -8,16 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { Printer, Copy, Settings, FileText, Tag, Plus, Pencil } from "lucide-react";
+import { Printer, Copy, Settings, Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import type { PrintTicketType } from "../types";
+
 interface DebugPrintResult {
   file_path: string;
   html_preview: string;
   byte_count: number;
 }
 
-export function PrintCenterPage() {
+export function PrintPage() {
   const [activeTab, setActiveTab] = useState("preview");
   const [ticketTypes, setTicketTypes] = useState<PrintTicketType[]>([]);
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState<number | null>(null);
@@ -39,7 +40,7 @@ export function PrintCenterPage() {
       const defaultTt = tts.find(t => t.is_default);
       if (defaultTt) setSelectedTicketTypeId(defaultTt.id);
     } catch (e) {
-      toast.error("加載失敗", { description: String(e) });
+      toast.error("加载失败", { description: String(e) });
     }
   }
 
@@ -49,19 +50,19 @@ export function PrintCenterPage() {
   const [dineType, setDineType] = useState("堂食");
   const [ticketNote, setTicketNote] = useState("");
   const [itemsJson, setItemsJson] = useState(`[
-  ["宮保雞丁", 2, "少辣"],
+  ["宫保鸡丁", 2, "少辣"],
   ["麻婆豆腐", 1, null],
-  ["酸菜魚", 1, "加辣"]
+  ["酸菜鱼", 1, "加辣"]
 ]`);
 
   const [lotNo, setLotNo] = useState("LOT20260426001");
-  const [materialName, setMaterialName] = useState("雞胸肉");
+  const [materialName, setMaterialName] = useState("鸡胸肉");
   const [quantity, setQuantity] = useState("10.5");
   const [unit, setUnit] = useState("kg");
   const [expiryDate, setExpiryDate] = useState("2026-05-01");
-  const [supplierName, setSupplierName] = useState("新鮮食材供應商");
+  const [supplierName, setSupplierName] = useState("新鲜食材供应商");
 
-  const [rawContent, setRawContent] = useState("測試打印內容\\n第二行");
+  const [rawContent, setRawContent] = useState("测试打印内容\\n第二行");
   const [filename, setFilename] = useState("");
 
   const parseItems = () => {
@@ -80,7 +81,7 @@ export function PrintCenterPage() {
         <div className="text-center border-b-2 border-dashed border-gray-400 pb-2 mb-2">
           {t?.show_dine_type && <div className="text-lg font-bold">{t.name}</div>}
           {t?.show_order_no && <div className="text-sm">ORDER: {orderNo}</div>}
-          {t?.show_table_no && <div className="text-xs">桌號: A01</div>}
+          {t?.show_table_no && <div className="text-xs">桌号: A01</div>}
           {t?.show_dine_type && <div className="text-xs bg-black text-white inline-block px-2 py-0.5 mt-1 rounded">{dineType}</div>}
         </div>
         
@@ -99,13 +100,13 @@ export function PrintCenterPage() {
         
         {ticketNote && t?.show_item_note && (
           <div className="mt-2 pt-2 border-t border-dashed border-gray-400 text-orange-600 text-xs">
-            備註: {ticketNote}
+            备注: {ticketNote}
           </div>
         )}
         
         {t?.show_total_amount && (
           <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-right font-bold">
-            合計: ¥{items.reduce((sum: number, item: any[]) => sum + ((item[1] || 1) * 38), 0).toFixed(0)}
+            合计: ¥{items.reduce((sum: number, item: any[]) => sum + ((item[1] || 1) * 38), 0).toFixed(0)}
           </div>
         )}
         
@@ -178,9 +179,9 @@ export function PrintCenterPage() {
       }
       
       setResult(res);
-      toast.success(`已生成 (${res.byte_count} 字節)`);
+      toast.success(`已生成 (${res.byte_count} 字节)`);
     } catch (e: any) {
-      toast.error(`打印失敗: ${e}`);
+      toast.error(`打印失败: ${e}`);
     } finally {
       setLoading(false);
     }
@@ -189,7 +190,7 @@ export function PrintCenterPage() {
   const copyHtml = () => {
     if (result?.html_preview) {
       navigator.clipboard.writeText(result.html_preview);
-      toast.success("HTML 已複製");
+      toast.success("HTML 已复制");
     }
   };
 
@@ -198,77 +199,69 @@ export function PrintCenterPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">打印中心</h1>
-          <p className="text-muted-foreground mt-1">模板、票據類型、打印預覽一体化管理</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setActiveTab("templates")}>
-            <FileText className="h-4 w-4 mr-2" /> 模板
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setActiveTab("ticket-types")}>
-            <Tag className="h-4 w-4 mr-2" /> 票據類型
-          </Button>
+          <p className="text-muted-foreground mt-1">模板、票据类型、打印预览一体化管理</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="preview">預覽與打印</TabsTrigger>
+          <TabsTrigger value="preview">预览与打印</TabsTrigger>
+          <TabsTrigger value="ticket-types">票据类型</TabsTrigger>
           <TabsTrigger value="templates">模板管理</TabsTrigger>
-          <TabsTrigger value="ticket-types">票據類型</TabsTrigger>
         </TabsList>
 
         <TabsContent value="preview">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="lg:col-span-2">
               <CardHeader>
-                <CardTitle>參數輸入</CardTitle>
-                <CardDescription>選擇票據類型並輸入打印參數</CardDescription>
+                <CardTitle>参数输入</CardTitle>
+                <CardDescription>选择票据类型并输入打印参数</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-2">
                   <Select value={String(selectedTicketTypeId)} onValueChange={(v) => setSelectedTicketTypeId(Number(v))}>
-                    <SelectTrigger className="flex-1"><SelectValue placeholder="選擇票據類型" /></SelectTrigger>
+                    <SelectTrigger className="flex-1"><SelectValue placeholder="选择票据类型" /></SelectTrigger>
                     <SelectContent>
                       {ticketTypes.map(t => (
-                        <SelectItem key={t.id} value={String(t.id)}>{t.name} {t.is_default && "(默認)"}</SelectItem>
+                        <SelectItem key={t.id} value={String(t.id)}>{t.name} {t.is_default && "(默认)"}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}><Settings className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" onClick={() => { setEditingTicketType(null); setEditDialogOpen(true); }}><Settings className="h-4 w-4" /></Button>
                 </div>
 
                 {selectedTicketType?.code === "label" ? (
                   <>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label>批次號</Label><Input value={lotNo} onChange={e => setLotNo(e.target.value)} /></div>
-                      <div className="space-y-2"><Label>材料名稱</Label><Input value={materialName} onChange={e => setMaterialName(e.target.value)} /></div>
+                      <div className="space-y-2"><Label>批次号</Label><Input value={lotNo} onChange={e => setLotNo(e.target.value)} /></div>
+                      <div className="space-y-2"><Label>材料名称</Label><Input value={materialName} onChange={e => setMaterialName(e.target.value)} /></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label>數量</Label><Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} /></div>
-                      <div className="space-y-2"><Label>單位</Label><Input value={unit} onChange={e => setUnit(e.target.value)} /></div>
+                      <div className="space-y-2"><Label>数量</Label><Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} /></div>
+                      <div className="space-y-2"><Label>单位</Label><Input value={unit} onChange={e => setUnit(e.target.value)} /></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2"><Label>到期日期</Label><Input type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} /></div>
-                      <div className="space-y-2"><Label>供應商</Label><Input value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="可選" /></div>
+                      <div className="space-y-2"><Label>供应商</Label><Input value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="可选" /></div>
                     </div>
                   </>
                 ) : selectedTicketType?.code === "raw" ? (
                   <div className="space-y-2">
-                    <Label>打印內容</Label>
+                    <Label>打印内容</Label>
                     <Textarea value={rawContent} onChange={e => setRawContent(e.target.value)} rows={6} className="font-mono text-sm" />
-                    <p className="text-xs text-muted-foreground">使用 \n 表示換行</p>
+                    <p className="text-xs text-muted-foreground">使用 \n 表示换行</p>
                   </div>
                 ) : (
                   <>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label>訂單號</Label><Input value={orderNo} onChange={e => setOrderNo(e.target.value)} /></div>
+                      <div className="space-y-2"><Label>订单号</Label><Input value={orderNo} onChange={e => setOrderNo(e.target.value)} /></div>
                       <div className="space-y-2">
-                        <Label>用餐類型</Label>
+                        <Label>用餐类型</Label>
                         <Select value={dineType} onValueChange={setDineType}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="堂食">堂食</SelectItem>
-                            <SelectItem value="外賣">外賣</SelectItem>
+                            <SelectItem value="外卖">外卖</SelectItem>
                             <SelectItem value="自取">自取</SelectItem>
                           </SelectContent>
                         </Select>
@@ -277,13 +270,13 @@ export function PrintCenterPage() {
                     <div className="space-y-2">
                       <Label>菜品列表 (JSON)</Label>
                       <Textarea value={itemsJson} onChange={e => setItemsJson(e.target.value)} rows={5} className="font-mono text-sm" />
-                      <p className="text-xs text-muted-foreground">格式: [["菜名", 數量, "備註"], ...]</p>
+                      <p className="text-xs text-muted-foreground">格式: [["菜名", 数量, "备注"], ...]</p>
                     </div>
-                    <div className="space-y-2"><Label>訂單備註</Label><Input value={ticketNote} onChange={e => setTicketNote(e.target.value)} placeholder="可選" /></div>
+                    <div className="space-y-2"><Label>订单备注</Label><Input value={ticketNote} onChange={e => setTicketNote(e.target.value)} placeholder="可选" /></div>
                   </>
                 )}
                 
-                <div className="space-y-2"><Label>文件名 (可選)</Label><Input value={filename} onChange={e => setFilename(e.target.value)} placeholder="debug" /></div>
+                <div className="space-y-2"><Label>文件名 (可选)</Label><Input value={filename} onChange={e => setFilename(e.target.value)} placeholder="debug" /></div>
                 
                 <Button onClick={handlePrint} disabled={loading || !selectedTicketType} className="w-full">
                   <Printer className="h-4 w-4 mr-2" />{loading ? "生成中..." : "生成打印"}
@@ -293,11 +286,11 @@ export function PrintCenterPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>即時預覽</CardTitle>
-                <CardDescription>熱敏紙效果</CardDescription>
+                <CardTitle>即时预览</CardTitle>
+                <CardDescription>热敏纸效果</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center bg-gray-100 p-4 rounded-lg min-h-[300px]">
-                {selectedTicketType ? renderMockup() : <div className="text-muted-foreground">請選擇票據類型</div>}
+                {selectedTicketType ? renderMockup() : <div className="text-muted-foreground">请选择票据类型</div>}
               </CardContent>
             </Card>
           </div>
@@ -306,8 +299,8 @@ export function PrintCenterPage() {
             <Card className="mt-4">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>打印結果 ({result.byte_count} 字節)</span>
-                  <Button variant="outline" size="sm" onClick={copyHtml}><Copy className="h-4 w-4 mr-2" />複製</Button>
+                  <span>打印结果 ({result.byte_count} 字节)</span>
+                  <Button variant="outline" size="sm" onClick={copyHtml}><Copy className="h-4 w-4 mr-2" />复制</Button>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -317,30 +310,15 @@ export function PrintCenterPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="templates">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>打印模板</CardTitle>
-                <CardDescription>管理打印模板配置</CardDescription>
-              </div>
-              <Button size="sm"><Plus className="h-4 w-4 mr-2" />���建模板</Button>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">模板管理功能 - 跳轉至 print-templates-page</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="ticket-types">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>票據類型</CardTitle>
-                <CardDescription>管理票據類型配置</CardDescription>
+                <CardTitle>票据类型</CardTitle>
+                <CardDescription>管理票据类型配置</CardDescription>
               </div>
               <Button size="sm" onClick={() => { setEditingTicketType(null); setEditDialogOpen(true); }}>
-                <Plus className="h-4 w-4 mr-2" />新建類型
+                <Plus className="h-4 w-4 mr-2" />新建类型
               </Button>
             </CardHeader>
             <CardContent>
@@ -348,7 +326,7 @@ export function PrintCenterPage() {
                 {ticketTypes.map(t => (
                   <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
-                      <div className="font-medium">{t.name} {t.is_default && <span className="text-xs bg-primary/10 px-2 py-0.5 rounded">(默認)</span>}</div>
+                      <div className="font-medium">{t.name} {t.is_default && <span className="text-xs bg-primary/10 px-2 py-0.5 rounded">(默认)</span>}</div>
                       <div className="text-sm text-muted-foreground">{t.paper_width} | {t.code}</div>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => { setEditingTicketType(t); setEditDialogOpen(true); }}>
@@ -360,12 +338,27 @@ export function PrintCenterPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="templates">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>打印模板</CardTitle>
+                <CardDescription>管理打印模板配置</CardDescription>
+              </div>
+              <Button size="sm"><Plus className="h-4 w-4 mr-2" />创建模板</Button>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">模板管理功能 - 跳转至 print-templates-page</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editingTicketType ? "編輯票據類型" : "新建票據類型"}</DialogTitle>
+            <DialogTitle>{editingTicketType ? "编辑票据类型" : "新建票据类型"}</DialogTitle>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>取消</Button>

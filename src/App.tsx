@@ -21,7 +21,7 @@ import { ProductionOrdersPage } from "@/pages/production-orders-page";
 import { StocktakesPage } from "@/pages/stocktakes-page";
 import { ReportsPage } from "@/pages/reports-page";
 import { OrdersPage } from "@/pages/orders-page";
-import { PrintCenterPage } from "@/pages/print-center-page";
+import { PrintPage } from "@/pages/print-page";
 import { PrintSettingsPage } from "@/pages/print-settings-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -189,7 +189,7 @@ function App() {
                 <Route path="/production-orders" element={<ProductionOrdersPage orders={productionOrders} recipes={recipes} onCreateOrder={handleCreateProductionOrder} onStartOrder={handleStartProductionOrder} onCompleteOrder={handleCompleteProductionOrder} onViewOrder={handleViewProductionOrder} onDeleteOrder={handleDeleteProductionOrder} selectedOrder={selectedProductionOrder} searchQuery={searchQuery} />} />
                 <Route path="/stocktakes" element={<StocktakesPage stocktakes={stocktakes} onCreateStocktake={handleCreateStocktake} onUpdateItem={handleUpdateStocktakeItem} onCompleteStocktake={handleCompleteStocktake} onViewStocktake={handleViewStocktake} onDeleteStocktake={handleDeleteStocktake} selectedStocktake={selectedStocktake} searchQuery={searchQuery} />} />
                 <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/print-templates" element={<PrintCenterPage />} />
+                <Route path="/print" element={<PrintPage />} />
                 <Route path="/print-settings" element={<PrintSettingsPage />} />
                 <Route path="*" element={<DashboardPage materialsCount={materials.length} recipesCount={recipes.length} ordersCount={orders.length} batchesCount={inventoryBatches.length} orders={orders} inventorySummary={inventorySummary} loading={loading} />} />
               </Routes>
