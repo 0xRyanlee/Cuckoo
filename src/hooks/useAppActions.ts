@@ -414,7 +414,7 @@ export function useAppActions({
     return await invoke<OrderItemModifier[]>("get_order_item_modifiers", { orderItemId: order_item_id });
   };
 
-  const handleReportTelemetry = async (payload: { client_id: string; version: string; uptime_hours: number; today_sales: number; today_orders: number }, webhookUrl?: string) => {
+  const handleReportTelemetry = async (payload: { client_id: string; version: string; event_type: string; uptime_hours: number; today_sales: number; today_orders: number; metadata: any }, webhookUrl?: string) => {
     try { await invoke("report_telemetry", { payload, webhookUrl: webhookUrl || null }); } catch (e) { console.error("telemetry failed:", e); }
   };
 

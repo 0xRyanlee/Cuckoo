@@ -158,7 +158,7 @@ export function RecipesPage({
     setEditingItemWastage((item.wastage_rate * 100).toString());
   }
 
-  function saveEditItem() {
+  async function saveEditItem() {
     if (!editingItemId || !selectedRecipe) return;
     const qty = parseSafeFloat(editingItemQty);
     const wastage = parseSafeFloat(editingItemWastage);
