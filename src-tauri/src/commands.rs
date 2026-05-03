@@ -1,6 +1,6 @@
 use tauri::State;
 use crate::database::{Database, MaterialWithTags, Unit, MaterialCategory, Tag, MaterialState, Supplier, Recipe, RecipeWithItems, RecipeCostResult, MenuItem, MenuCategory, Order, OrderItem, OrderItemModifier, KitchenStation, KitchenTicket, InventoryBatch, InventorySummary, AttributeTemplate, EntityAttribute, InventoryTxn, MenuItemSpec, PrinterConfig, PrintTask, PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Notification, Customer, Coupon};
-use crate::printer::{self, EscPosBuilder, LanPrinter};
+use crate::printer::{self, EscPosBuilder, LanPrinter, scan_lan_printers as LAN_SCAN};
 use serde::{Deserialize, Serialize};
 
 pub struct AppState {
@@ -622,8 +622,8 @@ pub fn update_menu_item(state: State<AppState>, id: i64, name: Option<String>, c
 }
 
 #[tauri::command]
-pub fn toggle_menu_item_availability(state: State<AppState>, id: i64) -> Result<bool, String> {
-    state.db.toggle_menu_item_availability(id).map_err(|e| e.to_string())
+pub fn toggle_menu_item_availability(state: State<AppState>, id: i64, is_available: Option<bool>) -> Result<bool, String> {
+    state.db.toggle_menu_item_availability(id, is_available).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -684,15 +684,37 @@ pub struct TelemetryPayload {
     pub metadata: Option<serde_json::Value>,
 }
 
+fn telemetry_endpoint(candidate: Option<&str>) -> String {
+    const DEFAULT_URL: &str = "https://your-cloud-server.com/api/telemetry/heartbeat";
+    let default = std::env::var("CUCKOO_TELEMETRY_URL").unwrap_or_else(|_| DEFAULT_URL.to_string());
+    let allowlist = std::env::var("CUCKOO_TELEMETRY_ALLOWLIST")
+        .unwrap_or_else(|_| default.clone())
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+
+    if let Some(url) = candidate {
+        if allowlist.iter().any(|allowed| allowed == url) {
+            return url.to_string();
+        }
+    }
+    default
+}
+
 #[tauri::command]
 pub async fn report_telemetry(
     payload: TelemetryPayload,
     webhook_url: Option<String>,
 ) -> Result<(), String> {
-    let url = webhook_url.unwrap_or_else(|| {
-        "https://your-cloud-server.com/api/telemetry/heartbeat".to_string()
-    });
-    
+    let url = telemetry_endpoint(webhook_url.as_deref());
+
+    // Skip if the URL is still the unconfigured placeholder — avoids noisy
+    // network errors in deployments that haven't set up a telemetry server.
+    if url.contains("your-cloud-server.com") {
+        return Ok(());
+    }
+
     let client = reqwest::Client::new();
     match client.post(&url)
         .json(&payload)
@@ -798,7 +820,7 @@ pub fn delete_printer(state: State<AppState>, id: i64) -> Result<(), String> {
 #[tauri::command]
 pub fn scan_lan_printers(_state: State<AppState>, subnet: String, timeout_ms: Option<u64>) -> Result<Vec<LanPrinter>, String> {
     let timeout = timeout_ms.unwrap_or(500);
-    Ok(printer::scan_lan_printers(&subnet, timeout))
+    Ok(LAN_SCAN(&subnet, timeout))
 }
 
 #[tauri::command]
