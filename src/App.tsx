@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { appLogger } from "@/lib/logger";
 import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,10 +26,10 @@ import { PrintPage } from "@/pages/print-page";
 import { PrintSettingsPage } from "@/pages/print-settings-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ErrorBoundary } from "@/components/error-boundary";
 import { toast } from "sonner";
 import { useAppData } from "@/hooks/useAppData";
 import { useAppActions } from "@/hooks/useAppActions";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { OrderWithItems, OrderItemModifier } from "./types";
 
 // ==================== App ====================
@@ -40,6 +41,19 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void } | null>(null);
   const [appStartTime] = useState(Date.now());
+  const [unseenErrorCount, setUnseenErrorCount] = useState(0);
+
+  // Increment badge whenever the logger writes a new entry
+  useEffect(() => {
+    const handler = () => setUnseenErrorCount((n) => n + 1);
+    window.addEventListener("cuckoo:logged", handler);
+    return () => window.removeEventListener("cuckoo:logged", handler);
+  }, []);
+
+  // Clear badge when user opens settings
+  useEffect(() => {
+    if (activeTab === "settings") setUnseenErrorCount(0);
+  }, [activeTab]);
 
   const {
     loading, connected,
@@ -161,25 +175,23 @@ function App() {
 
   const handleCreateMenuItemFull = actions.handleCreateMenuItem;
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-sm text-muted-foreground">加载中...</div>
-      </div>
-    );
-  }
+  // Keep a ref to orders so the telemetry effect can read the latest value
+  // without re-running every time orders change.
+  const ordersRef = useRef(orders);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const handleReportTelemetryRef = useRef(handleReportTelemetry);
+  useEffect(() => { handleReportTelemetryRef.current = handleReportTelemetry; }, [handleReportTelemetry]);
 
   useEffect(() => {
     const startTelemetry = async (eventType = "heartbeat", metadata: any = null) => {
-      const todayOrders = orders.filter(o => {
-        const od = new Date(o.created_at);
-        const td = new Date();
-        return od.toDateString() === td.toDateString();
-      });
+      const today = new Date().toDateString();
+      const todayOrders = ordersRef.current.filter(o => new Date(o.created_at).toDateString() === today);
       const todaySales = todayOrders.reduce((sum, o) => sum + (o.status === "submitted" ? o.amount_total : 0), 0);
       const uptimeHours = (Date.now() - appStartTime) / (1000 * 60 * 60);
+      // Silently skip — errors are suppressed so network failures don't pollute the error log
       try {
-        await handleReportTelemetry({
+        await handleReportTelemetryRef.current({
           client_id: "cuckoo_local",
           version: "1.2.2",
           event_type: eventType,
@@ -188,16 +200,16 @@ function App() {
           today_orders: todayOrders.length,
           metadata: metadata,
         });
-      } catch (e) {
-        console.error("telemetry error:", e);
-      }
+      } catch { /* telemetry is best-effort; never surface to user */ }
     };
 
     // 全局錯誤捕捉
     const handleError = (event: ErrorEvent) => {
+      appLogger.logRuntimeError(event);
       startTelemetry("error", { message: event.message, stack: event.error?.stack });
     };
     const handleRejection = (event: PromiseRejectionEvent) => {
+      appLogger.logRuntimeError(event);
       startTelemetry("error", { message: String(event.reason), type: "unhandled_rejection" });
     };
 
@@ -212,14 +224,39 @@ function App() {
       window.removeEventListener("unhandledrejection", handleRejection);
       clearInterval(interval);
     };
-  }, [orders, appStartTime]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appStartTime]); // intentionally omit orders — read via ref to avoid re-firing on every order change
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full bg-background">
+        <div className="w-[280px] border-r p-4 space-y-3">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="flex-1 p-6 space-y-4">
+          <Skeleton className="h-12 w-48" />
+          <Skeleton className="h-64 w-full" />
+          <div className="grid grid-cols-4 gap-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <ErrorBoundary>
     <TooltipProvider>
       <SidebarProvider>
         <div className="flex h-screen w-full bg-background">
-          <AppSidebar activeTab={activeTab} onTabChange={(tab) => navigate("/" + tab)} connected={connected} />
+          <AppSidebar activeTab={activeTab} onTabChange={(tab) => navigate("/" + tab)} connected={connected} errorCount={unseenErrorCount} />
           <SidebarInset className="flex flex-col">
             <AppHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} onRefresh={loadData} refreshing={loading} />
             <main className="flex-1 overflow-auto p-6">
@@ -257,7 +294,6 @@ function App() {
         onConfirm={() => confirmAction?.onConfirm()}
       />
     </TooltipProvider>
-    </ErrorBoundary>
   );
 }
 

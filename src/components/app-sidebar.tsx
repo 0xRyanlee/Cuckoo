@@ -62,9 +62,10 @@ interface AppSidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   connected: boolean;
+  errorCount?: number;
 }
 
-export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
+export function AppSidebar({ activeTab, onTabChange, errorCount = 0 }: AppSidebarProps) {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
@@ -94,18 +95,26 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
             )}
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton
-                      onClick={() => onTabChange(item.id)}
-                      isActive={activeTab === item.id}
-                      tooltip={item.label}
-                    >
-                      {item.icon && <item.icon className="h-4 w-4" />}
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {group.items.map((item) => {
+                  const showErrorBadge = item.id === "settings" && errorCount > 0;
+                  return (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        onClick={() => onTabChange(item.id)}
+                        isActive={activeTab === item.id}
+                        tooltip={item.label}
+                      >
+                        {item.icon && <item.icon className="h-4 w-4" />}
+                        <span className="flex-1">{item.label}</span>
+                        {showErrorBadge && (
+                          <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
+                            {errorCount > 99 ? "99+" : errorCount}
+                          </span>
+                        )}
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

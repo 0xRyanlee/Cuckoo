@@ -9,12 +9,10 @@ use std::path::PathBuf;
 use std::panic;
 
 fn get_db_path() -> PathBuf {
-    // 獲取應用數據目錄
     let data_dir = dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Cuckoo");
     
-    // 確保目錄存在
     fs::create_dir_all(&data_dir).expect("Failed to create data directory");
     
     data_dir.join("cuckoo.db")
@@ -31,12 +29,15 @@ fn get_log_dir() -> PathBuf {
 
 fn setup_panic_hook() {
     let log_dir = get_log_dir();
+    let start_time = std::time::Instant::now();
     panic::set_hook(Box::new(move |panic_info| {
+        let elapsed = start_time.elapsed().as_secs();
         let log_file = log_dir.join("crash.log");
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
         let message = format!(
-            "[{}] PANIC: {}\nLocation: {:?}\n\n",
+            "[{}] PANIC after {}s: {}\nLocation: {:?}\n\n",
             timestamp,
+            elapsed,
             panic_info,
             panic_info.location()
         );
@@ -47,12 +48,18 @@ fn setup_panic_hook() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    eprintln!("[Cuckoo] Starting application...");
     setup_panic_hook();
     
     let db_path = get_db_path();
-    log::info!("Database path: {:?}", db_path);
+    eprintln!("[Cuckoo] Database path: {:?}", db_path);
     
-    let db = Database::new(db_path.to_str().unwrap()).expect("Failed to create database");
+    let db = match Database::new(db_path.to_str().unwrap()) {
+        Ok(db) => { eprintln!("[Cuckoo] Database created successfully"); db }
+        Err(e) => { eprintln!("[Cuckoo] Database error: {}", e); panic!("Failed to create database: {}", e) }
+    };
+    
+    eprintln!("[Cuckoo] Building Tauri app...");
     
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

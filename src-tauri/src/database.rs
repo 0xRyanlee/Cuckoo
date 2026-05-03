@@ -661,8 +661,10 @@ pub struct Database {
 impl Database {
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
-        // 啟用外鍵約束
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        // 設置 busy timeout 解決多進程鎖定問題
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        // 啟用 WAL mode 提高並發性能
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys = ON")?;
         let db = Database {
             conn: Mutex::new(conn),
         };
@@ -1976,11 +1978,12 @@ impl Database {
         Ok(())
     }
 
-    pub fn toggle_menu_item_availability(&self, id: i64) -> Result<bool> {
+    pub fn toggle_menu_item_availability(&self, id: i64, is_available: Option<bool>) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let current: bool = conn.query_row("SELECT is_available FROM menu_items WHERE id = ?1", params![id], |row| row.get::<_, i32>(0).map(|v| v != 0))?;
-        conn.execute("UPDATE menu_items SET is_available = ?1 WHERE id = ?2", params![if current { 0 } else { 1 }, id])?;
-        Ok(!current)
+        let next = is_available.unwrap_or(!current);
+        conn.execute("UPDATE menu_items SET is_available = ?1 WHERE id = ?2", params![if next { 1 } else { 0 }, id])?;
+        Ok(next)
     }
 
     pub fn batch_toggle_menu_item_availability(&self, ids: &[i64], is_available: bool) -> Result<usize> {
@@ -3904,7 +3907,7 @@ mod tests {
         let items = db.get_menu_items(None).unwrap();
         if items.is_empty() { return; }
         let item = &items[0];
-        db.toggle_menu_item_availability(item.id).unwrap();
+        db.toggle_menu_item_availability(item.id, None).unwrap();
         let all_items = db.get_menu_items(None).unwrap();
         let found = all_items.iter().find(|i| i.id == item.id);
         assert!(found.is_some());
