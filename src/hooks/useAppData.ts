@@ -1,12 +1,24 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { appLogger } from "@/lib/logger";
 import type {
   Unit, MaterialCategory, TagItem, Material, Recipe, RecipeWithItems,
-  RecipeCostResult, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
+  RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
   TicketWithItems, InventoryBatch, InventorySummary, InventoryTxn, AttributeTemplate,
   Supplier, MaterialState, PurchaseOrder, PurchaseOrderWithItems,
   ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems
 } from "../types";
+
+// Wraps invoke so any failure is logged with the operation name before re-throwing.
+// This lets the pipeline immediately identify which specific IPC call caused a black screen.
+async function tracked<T>(operation: string, promise: Promise<T>): Promise<T> {
+  try {
+    return await promise;
+  } catch (e) {
+    appLogger.logInvokeError(operation, e);
+    throw e;
+  }
+}
 
 export function useAppData() {
   const [loading, setLoading] = useState(true);
@@ -17,6 +29,7 @@ export function useAppData() {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipeTypes, setRecipeTypes] = useState<RecipeType[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeWithItems | null>(null);
   const [recipeCost, setRecipeCost] = useState<RecipeCostResult | null>(null);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
@@ -42,31 +55,32 @@ export function useAppData() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await invoke<string>("health_check");
+      const result = await tracked("health_check", invoke<string>("health_check"));
       setConnected(result === "ok");
       try { await invoke("check_and_create_alerts"); } catch { /* ignore alert check errors */ }
-      setUnits(await invoke<Unit[]>("get_units"));
-      setCategories(await invoke<MaterialCategory[]>("get_material_categories"));
-      setTags(await invoke<TagItem[]>("get_tags"));
-      setMaterials(await invoke<Material[]>("get_materials"));
-      setRecipes(await invoke<Recipe[]>("get_recipes"));
-      setMenuCategories(await invoke<MenuCategory[]>("get_menu_categories"));
-      setMenuItems(await invoke<MenuItem[]>("get_menu_items"));
-      const fetchedOrders = await invoke<Order[]>("get_orders", { limit: 200, offset: 0 });
+      setUnits(await tracked("get_units", invoke<Unit[]>("get_units")));
+      setCategories(await tracked("get_material_categories", invoke<MaterialCategory[]>("get_material_categories")));
+      setTags(await tracked("get_tags", invoke<TagItem[]>("get_tags")));
+      setMaterials(await tracked("get_materials", invoke<Material[]>("get_materials")));
+      setRecipes(await tracked("get_recipes", invoke<Recipe[]>("get_recipes")));
+      setRecipeTypes(await tracked("get_recipe_types", invoke<RecipeType[]>("get_recipe_types")));
+      setMenuCategories(await tracked("get_menu_categories", invoke<MenuCategory[]>("get_menu_categories")));
+      setMenuItems(await tracked("get_menu_items", invoke<MenuItem[]>("get_menu_items")));
+      const fetchedOrders = await tracked("get_orders", invoke<Order[]>("get_orders", { limit: 200, offset: 0 }));
       setOrders(fetchedOrders);
       setOrdersHasMore(fetchedOrders.length === 200);
-      setStations(await invoke<KitchenStation[]>("get_kitchen_stations"));
-      setInventoryBatches(await invoke<InventoryBatch[]>("get_inventory_batches"));
-      setInventorySummary(await invoke<InventorySummary[]>("get_inventory_summary"));
-      setInventoryTxns(await invoke<InventoryTxn[]>("get_inventory_txns", { limit: 50 }));
-      setAttributeTemplates(await invoke<AttributeTemplate[]>("get_attribute_templates"));
-      setSuppliers(await invoke<Supplier[]>("get_suppliers"));
-      setMaterialStates(await invoke<MaterialState[]>("get_all_material_states"));
-      setPurchaseOrders(await invoke<PurchaseOrder[]>("get_purchase_orders"));
-      setProductionOrders(await invoke<ProductionOrder[]>("get_production_orders"));
-      setStocktakes(await invoke<Stocktake[]>("get_stocktakes"));
-      const pendingTickets = await invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "pending" });
-      const startedTickets = await invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "started" });
+      setStations(await tracked("get_kitchen_stations", invoke<KitchenStation[]>("get_kitchen_stations")));
+      setInventoryBatches(await tracked("get_inventory_batches", invoke<InventoryBatch[]>("get_inventory_batches")));
+      setInventorySummary(await tracked("get_inventory_summary", invoke<InventorySummary[]>("get_inventory_summary")));
+      setInventoryTxns(await tracked("get_inventory_txns", invoke<InventoryTxn[]>("get_inventory_txns", { limit: 50 })));
+      setAttributeTemplates(await tracked("get_attribute_templates", invoke<AttributeTemplate[]>("get_attribute_templates")));
+      setSuppliers(await tracked("get_suppliers", invoke<Supplier[]>("get_suppliers")));
+      setMaterialStates(await tracked("get_all_material_states", invoke<MaterialState[]>("get_all_material_states")));
+      setPurchaseOrders(await tracked("get_purchase_orders", invoke<PurchaseOrder[]>("get_purchase_orders")));
+      setProductionOrders(await tracked("get_production_orders", invoke<ProductionOrder[]>("get_production_orders")));
+      setStocktakes(await tracked("get_stocktakes", invoke<Stocktake[]>("get_stocktakes")));
+      const pendingTickets = await tracked("get_tickets_pending", invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "pending" }));
+      const startedTickets = await tracked("get_tickets_started", invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "started" }));
       setKdsTickets([...pendingTickets, ...startedTickets]);
     } catch (e) {
       setConnected(false);
@@ -82,6 +96,7 @@ export function useAppData() {
     tags, setTags,
     materials, setMaterials,
     recipes, setRecipes,
+    recipeTypes, setRecipeTypes,
     selectedRecipe, setSelectedRecipe,
     recipeCost, setRecipeCost,
     menuCategories, setMenuCategories,

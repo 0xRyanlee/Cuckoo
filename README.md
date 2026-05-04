@@ -23,10 +23,12 @@
 
 - [Features / 功能亮點](#features--功能亮點)
 - [Architecture / 架構](#architecture--架構)
+- [Docs Index / 文檔索引](#docs-index--文檔索引)
 - [Core Workflow / 核心流程](#core-workflow--核心流程)
 - [Tech Stack / 技術棧](#tech-stack--技術棧)
 - [Quick Start / 快速開始](#quick-start--快速開始)
 - [Project Structure / 項目結構](#project-structure--項目結構)
+- [Testing / 測試](#testing--測試)
 - [Build & Release / 構建與發佈](#build--release--構建與發佈)
 - [Database Schema / 數據庫結構](#database-schema--數據庫結構)
 - [API Overview / API 概覽](#api-overview--api-概覽)
@@ -93,6 +95,18 @@ graph TB
 ```
 
 > **Arch Evolution Strategy (v1.2.1+)**: Cuckoo operates as a robust **Local-First** application (unaffected by internet outages). It includes a built-in Telemetry/Heartbeat system and Tauri Auto-Updater to allow remote owners to track operations and push silent updates. Future versions (v2.0) will introduce an optional Cloud SaaS sync.
+
+---
+
+## Docs Index / 文檔索引
+
+| 文档 | 说明 | 更新日期 |
+|------|------|----------|
+| [docs/backlog-and-fix-list.md](docs/backlog-and-fix-list.md) | 待开发与修复清单 (P0/P1/P2) | 2026-04-30 |
+| [docs/test-plan-atomic-v1.2.2.md](docs/test-plan-atomic-v1.2.2.md) | 原子性功能测试方案 | 2026-04-30 |
+| [docs/test-plan-user-journey-v1.2.2.md](docs/test-plan-user-journey-v1.2.2.md) | 用户旅程测试方案 | 2026-04-30 |
+| [docs/api-design.md](docs/api-design.md) | API 设计文档 | - |
+| [docs/comprehensive-audit-report-v1.2.2.md](docs/comprehensive-audit-report-v1.2.2.md) | v1.2.2 审计报告 | 2026-04-29 |
 
 ---
 
@@ -193,7 +207,47 @@ npm run tauri dev
 npm run dev
 ```
 
-### Testing / 測試
+---
+
+## Testing / 測試
+
+### Test Plans / 測試方案
+
+本项目提供两套互补的测试方案：
+
+| 文档 | 用途 | 覆盖范围 |
+|------|------|----------|
+| [docs/test-plan-atomic-v1.2.2.md](docs/test-plan-atomic-v1.2.2.md) | **原子性测试** - 功能点验证 | P0 核心安全、功能修复 |
+| [docs/test-plan-user-journey-v1.2.2.md](docs/test-plan-user-journey-v1.2.2.md) | **用户旅程测试** - 角色操作验证 | 6 种角色、34 个完整场景 |
+
+#### 原子性测试 (Atomic Tests)
+
+针对已修复的 bug 和安全功能：
+
+- **配方删除防呆**: T-001, T-002 — 删除前检查引用
+- **成本计算递归保护**: T-003~T-006 — 深度计数、循环检测
+- **遥测白名单**: T-007~T-009 — URL 校验
+- **调试打印安全**: T-010~T-013 — 文件名过滤
+- **循环引用拦截**: T-014~T-015 — 前端检测
+
+详细见 [`docs/test-plan-atomic-v1.2.2.md`](docs/test-plan-atomic-v1.2.2.md)
+
+#### 用户旅程测试 (User Journey Tests)
+
+按角色划分的端到端测试：
+
+| 角色 | 简称 | 测试用例 |
+|------|------|----------|
+| 店长 | UC-O | UC-O-001 ~ UC-O-008 |
+| 收银员 | UC-C | UC-C-001 ~ UC-C-006 |
+| 后厨 | UC-K | UC-K-001 ~ UC-K-005 |
+| 仓管 | UC-S | UC-S-001 ~ UC-S-006 |
+| 采购 | UC-B | UC-B-001 ~ UC-B-004 |
+| 维护 | UC-A | UC-A-001 ~ UC-A-004 |
+
+详细见 [`docs/test-plan-user-journey-v1.2.2.md`](docs/test-plan-user-journey-v1.2.2.md)
+
+### 执行测试
 
 ```bash
 # Run tests

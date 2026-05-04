@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type {
   Unit, MaterialCategory, TagItem, Material, Recipe, RecipeWithItems,
-  RecipeCostResult, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
+  RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
   TicketWithItems, InventoryBatch, InventorySummary, InventoryTxn, AttributeTemplate,
   Supplier, MaterialState, PurchaseOrder, PurchaseOrderWithItems,
   ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems
@@ -17,6 +17,7 @@ interface AppContextType {
   tags: TagItem[];
   materials: Material[];
   recipes: Recipe[];
+  recipeTypes: RecipeType[];
   selectedRecipe: RecipeWithItems | null;
   recipeCost: RecipeCostResult | null;
   menuCategories: MenuCategory[];
@@ -54,8 +55,8 @@ export function useMaterials() {
 }
 
 export function useRecipes() {
-  const { recipes, selectedRecipe, recipeCost } = useAppContext();
-  return { recipes, selectedRecipe, recipeCost };
+  const { recipes, recipeTypes, selectedRecipe, recipeCost } = useAppContext();
+  return { recipes, recipeTypes, selectedRecipe, recipeCost };
 }
 
 export function useMenu() {

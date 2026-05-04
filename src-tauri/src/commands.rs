@@ -1,5 +1,5 @@
 use tauri::State;
-use crate::database::{Database, MaterialWithTags, Unit, MaterialCategory, Tag, MaterialState, Supplier, Recipe, RecipeWithItems, RecipeCostResult, MenuItem, MenuCategory, Order, OrderItem, OrderItemModifier, KitchenStation, KitchenTicket, InventoryBatch, InventorySummary, AttributeTemplate, EntityAttribute, InventoryTxn, MenuItemSpec, PrinterConfig, PrintTask, PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Notification, Customer, Coupon};
+use crate::database::{Database, MaterialWithTags, Unit, MaterialCategory, Tag, MaterialState, Supplier, Recipe, RecipeWithItems, RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderItem, OrderItemModifier, KitchenStation, KitchenTicket, InventoryBatch, InventorySummary, AttributeTemplate, EntityAttribute, InventoryTxn, MenuItemSpec, PrinterConfig, PrintTask, PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Notification, Customer, Coupon};
 use crate::printer::{self, EscPosBuilder, LanPrinter, scan_lan_printers as LAN_SCAN};
 use serde::{Deserialize, Serialize};
 
@@ -69,6 +69,14 @@ pub struct CreateRecipeRequest {
     pub output_state_id: Option<i64>,
     pub output_unit_id: Option<i64>,
     pub items: Option<Vec<RecipeItemRequest>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateRecipeTypeRequest {
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub sort_no: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -252,6 +260,41 @@ pub fn get_attribute_templates(state: State<AppState>, entity_type: Option<Strin
 }
 
 #[tauri::command]
+pub fn create_attribute_template(state: State<AppState>, entity_type: String, category: Option<String>, attr_code: String, attr_name: String, data_type: String, unit: Option<String>, default_value: Option<f64>, formula: Option<String>) -> Result<i64, String> {
+    state.db.create_attribute_template(
+        &entity_type,
+        category.as_deref(),
+        &attr_code,
+        &attr_name,
+        &data_type,
+        unit.as_deref(),
+        default_value,
+        formula.as_deref(),
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_attribute_template(state: State<AppState>, id: i64, entity_type: String, category: Option<String>, attr_code: String, attr_name: String, data_type: String, unit: Option<String>, default_value: Option<f64>, formula: Option<String>, is_active: bool) -> Result<(), String> {
+    state.db.update_attribute_template(
+        id,
+        &entity_type,
+        category.as_deref(),
+        &attr_code,
+        &attr_name,
+        &data_type,
+        unit.as_deref(),
+        default_value,
+        formula.as_deref(),
+        is_active,
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_attribute_template(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_attribute_template(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn set_entity_attribute(state: State<AppState>, req: SetAttributeRequest) -> Result<(), String> {
     state.db.set_entity_attribute(
         &req.entity_type,
@@ -275,8 +318,29 @@ pub fn get_recipes(state: State<AppState>, recipe_type: Option<String>) -> Resul
 }
 
 #[tauri::command]
+pub fn get_recipe_types(state: State<AppState>) -> Result<Vec<RecipeType>, String> {
+    state.db.get_recipe_types().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_recipe_type(state: State<AppState>, req: CreateRecipeTypeRequest) -> Result<i64, String> {
+    state.db.create_recipe_type(&req.code, &req.name, req.description.as_deref(), req.sort_no.unwrap_or(0)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_recipe_with_items(state: State<AppState>, recipe_id: i64) -> Result<RecipeWithItems, String> {
     state.db.get_recipe_with_items(recipe_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn generate_recipe_code(state: State<AppState>) -> Result<String, String> {
+    state.db.generate_recipe_code().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn seed_sample_recipes(state: State<AppState>) -> Result<String, String> {
+    state.db.seed_sample_recipes().map_err(|e| e.to_string())?;
+    Ok("示例配方已创建".to_string())
 }
 
 #[tauri::command]
@@ -647,8 +711,18 @@ pub fn delete_menu_category(state: State<AppState>, id: i64) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn update_recipe(state: State<AppState>, id: i64, name: Option<String>, output_qty: Option<f64>) -> Result<(), String> {
-    state.db.update_recipe(id, name.as_deref(), None, output_qty, None).map_err(|e| e.to_string())
+pub fn update_recipe(state: State<AppState>, id: i64, name: Option<String>, recipe_type: Option<String>, output_qty: Option<f64>) -> Result<(), String> {
+    state.db.update_recipe(id, name.as_deref(), recipe_type.as_deref(), output_qty, None).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_recipe_type(state: State<AppState>, id: i64, code: String, name: String, description: Option<String>, sort_no: i32) -> Result<(), String> {
+    state.db.update_recipe_type(id, &code, &name, description.as_deref(), sort_no).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_recipe_type(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_recipe_type(id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -266,8 +266,8 @@ export function POSPage({
           </CardContent>
         </Card>
 
-        <Card className="flex-1 min-h-0">
-          <CardHeader className="py-3 px-4">
+        <Card className="flex-1 min-h-0 flex flex-col">
+          <CardHeader className="py-3 px-4 flex-shrink-0">
             <CardTitle className="text-lg">
               商品列表
               <Badge variant="secondary" className="ml-2">
@@ -275,8 +275,8 @@ export function POSPage({
               </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <ScrollArea className="h-[calc(100%-3rem)]">
+          <CardContent className="px-4 pb-4 flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
               {loading ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {Array.from({ length: 8 }).map((_, i) => (

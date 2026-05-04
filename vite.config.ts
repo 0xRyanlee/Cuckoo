@@ -2,10 +2,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
+import fs from "fs";
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
+  base: "./",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -32,7 +34,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    host: "0.0.0.0",
     hmr: host
       ? {
           protocol: "ws",

@@ -98,6 +98,17 @@ pub struct Recipe {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RecipeType {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub sort_no: i32,
+    pub is_system: bool,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecipeItem {
     pub id: i64,
     pub recipe_id: i64,
@@ -112,7 +123,6 @@ pub struct RecipeItem {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecipeWithItems {
-    #[serde(flatten)]
     pub recipe: Recipe,
     pub items: Vec<RecipeItem>,
 }
@@ -817,6 +827,17 @@ impl Database {
                 FOREIGN KEY (unit_id) REFERENCES units(id)
             );
             CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe ON recipe_items(recipe_id);
+
+            CREATE TABLE IF NOT EXISTS recipe_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                description TEXT,
+                sort_no INTEGER NOT NULL DEFAULT 0,
+                is_system INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_recipe_types_active_sort ON recipe_types(is_active, sort_no, id);
             
             CREATE TABLE IF NOT EXISTS recipe_formulas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1269,6 +1290,13 @@ impl Database {
                 ('seafood_dishes', '海鲜类', 1), ('meat_dishes', '肉类', 2), ('vegetable_dishes', '素食类', 3), ('staple_other', '主食与其他', 4)",
             [],
         )?;
+        conn.execute(
+            "INSERT OR IGNORE INTO recipe_types (code, name, description, sort_no, is_system, is_active) VALUES
+                ('menu', '成品配方', '直接綁定菜單商品的出品配方', 1, 1, 1),
+                ('production', '半成品配方', '用於中央廚房或門店預製的產出型配方', 2, 1, 1),
+                ('modifier', '加料配方', '用於加料、配菜、附加項的局部配方', 3, 1, 1)",
+            [],
+        )?;
         let mat_count: i64 = conn.query_row("SELECT COUNT(*) FROM materials", [], |row| row.get(0))?;
         if mat_count == 0 {
             conn.execute(
@@ -1301,6 +1329,72 @@ impl Database {
                     ('麻辣方便面', 'MENU021', 4, 12.0, 1), ('配送费', 'MENU022', 4, 1.0, 1)",
                 [],
             )?;
+        }
+        // 初始化示例配方 (如果不存在的话)
+        // 使用 INSERT OR IGNORE 确保不会重复插入
+        conn.execute(
+            "INSERT OR IGNORE INTO recipes (code, name, recipe_type, output_qty) VALUES
+                ('RCP001', '麻辣东风螺', 'menu', 1.0),
+                ('RCP002', '麻辣毛肚', 'menu', 1.0),
+                ('RCP003', '麻辣方便面', 'menu', 1.0)",
+            [],
+        )?;
+        
+        // 获取刚插入的配方ID (如果已存在则查询现有ID)
+        let recipe1_id: Option<i64> = conn.query_row(
+            "SELECT id FROM recipes WHERE code = 'RCP001'", [], |row| row.get(0)
+        ).ok();
+        let recipe2_id: Option<i64> = conn.query_row(
+            "SELECT id FROM recipes WHERE code = 'RCP002'", [], |row| row.get(0)
+        ).ok();
+        let recipe3_id: Option<i64> = conn.query_row(
+            "SELECT id FROM recipes WHERE code = 'RCP003'", [], |row| row.get(0)
+        ).ok();
+        
+        // 插入配方明细 (如果不存在)
+        if let Some(r1_id) = recipe1_id {
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM recipe_items WHERE recipe_id = ?1", params![r1_id], |row| row.get(0)
+            )?;
+            if exists == 0 {
+                conn.execute(
+                    "INSERT INTO recipe_items (recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no) VALUES
+                        (?1, 'material', 1, 0.5, 2, 0.05, 1),
+                        (?1, 'material', 22, 0.1, 2, 0, 2),
+                        (?1, 'material', 23, 0.02, 4, 0, 3)",
+                    params![r1_id],
+                )?;
+            }
+        }
+        if let Some(r2_id) = recipe2_id {
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM recipe_items WHERE recipe_id = ?1", params![r2_id], |row| row.get(0)
+            )?;
+            if exists == 0 {
+                conn.execute(
+                    "INSERT INTO recipe_items (recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no) VALUES
+                        (?1, 'material', 11, 0.3, 2, 0.1, 1),
+                        (?1, 'material', 22, 0.08, 2, 0, 2),
+                        (?1, 'material', 23, 0.015, 4, 0, 3),
+                        (?1, 'material', 15, 0.05, 2, 0.1, 4)",
+                    params![r2_id],
+                )?;
+            }
+        }
+        if let Some(r3_id) = recipe3_id {
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM recipe_items WHERE recipe_id = ?1", params![r3_id], |row| row.get(0)
+            )?;
+            if exists == 0 {
+                conn.execute(
+                    "INSERT INTO recipe_items (recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no) VALUES
+                        (?1, 'material', 21, 1.0, 1, 0, 1),
+                        (?1, 'material', 22, 0.05, 2, 0, 2),
+                        (?1, 'material', 23, 0.01, 4, 0, 3),
+                        (?1, 'material', 17, 0.03, 2, 0.1, 4)",
+                    params![r3_id],
+                )?;
+            }
         }
         let station_count: i64 = conn.query_row("SELECT COUNT(*) FROM kitchen_stations", [], |row| row.get(0))?;
         if station_count == 0 {
@@ -1562,6 +1656,30 @@ impl Database {
         Ok(templates)
     }
 
+    pub fn create_attribute_template(&self, entity_type: &str, category: Option<&str>, attr_code: &str, attr_name: &str, data_type: &str, unit: Option<&str>, default_value: Option<f64>, formula: Option<&str>) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO attribute_templates (entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_template, is_active) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 1)",
+            params![entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn update_attribute_template(&self, id: i64, entity_type: &str, category: Option<&str>, attr_code: &str, attr_name: &str, data_type: &str, unit: Option<&str>, default_value: Option<f64>, formula: Option<&str>, is_active: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE attribute_templates SET entity_type = ?1, category = ?2, attr_code = ?3, attr_name = ?4, data_type = ?5, unit = ?6, default_value = ?7, formula = ?8, is_active = ?9 WHERE id = ?10",
+            params![entity_type, category, attr_code, attr_name, data_type, unit, default_value, formula, is_active as i32, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_attribute_template(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM attribute_templates WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     pub fn set_entity_attribute(&self, entity_type: &str, entity_id: i64, attr_code: &str, value: Option<f64>, value_text: Option<&str>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -1600,6 +1718,154 @@ impl Database {
         Ok(recipes)
     }
 
+    pub fn get_recipe_types(&self) -> Result<Vec<RecipeType>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, code, name, description, sort_no, is_system, is_active
+             FROM recipe_types
+             WHERE is_active = 1
+             ORDER BY sort_no, id"
+        )?;
+        let items = stmt.query_map([], |row| {
+            Ok(RecipeType {
+                id: row.get(0)?,
+                code: row.get(1)?,
+                name: row.get(2)?,
+                description: row.get(3)?,
+                sort_no: row.get(4)?,
+                is_system: row.get::<_, i32>(5)? != 0,
+                is_active: row.get::<_, i32>(6)? != 0,
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+        Ok(items)
+    }
+
+    pub fn create_recipe_type(&self, code: &str, name: &str, description: Option<&str>, sort_no: i32) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO recipe_types (code, name, description, sort_no, is_system, is_active)
+             VALUES (?1, ?2, ?3, ?4, 0, 1)",
+            params![code.trim(), name.trim(), description, sort_no],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn generate_recipe_code(&self) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        let max_num: Option<i64> = conn.query_row(
+            "SELECT MAX(CAST(SUBSTR(code, 4) AS INTEGER)) FROM recipes WHERE code GLOB 'RCP[0-9]*'",
+            [],
+            |row| row.get(0),
+        ).ok();
+
+        Ok(format!("RCP{:03}", max_num.unwrap_or(0) + 1))
+    }
+
+    pub fn seed_sample_recipes(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        let lookup_material_id = |code: &str| -> Result<i64> {
+            conn.query_row(
+                "SELECT id FROM materials WHERE code = ?1 AND is_active = 1",
+                params![code],
+                |row| row.get(0),
+            )
+        };
+        let lookup_unit_id = |code: &str| -> Result<i64> {
+            conn.query_row(
+                "SELECT id FROM units WHERE code = ?1",
+                params![code],
+                |row| row.get(0),
+            )
+        };
+
+        let dongfengluo_id = lookup_material_id("MAT001")?;
+        let maodu_id = lookup_material_id("MAT011")?;
+        let xianggu_id = lookup_material_id("MAT015")?;
+        let jinzhengu_id = lookup_material_id("MAT017")?;
+        let fangbianmian_id = lookup_material_id("MAT021")?;
+        let maladiliu_id = lookup_material_id("MAT022")?;
+        let lajiaoyou_id = lookup_material_id("MAT023")?;
+
+        let pc_unit_id = lookup_unit_id("pc")?;
+        let kg_unit_id = lookup_unit_id("kg")?;
+        let l_unit_id = lookup_unit_id("l")?;
+
+        conn.execute(
+            "DELETE FROM recipe_items
+             WHERE recipe_id IN (SELECT id FROM recipes WHERE code IN ('RCP001', 'RCP002', 'RCP003'))",
+            [],
+        )?;
+        conn.execute(
+            "DELETE FROM recipes WHERE code IN ('RCP001', 'RCP002', 'RCP003')",
+            [],
+        )?;
+
+        conn.execute(
+            "INSERT INTO recipes (code, name, recipe_type, output_qty) VALUES
+                ('RCP001', '麻辣东风螺', 'menu', 1.0),
+                ('RCP002', '麻辣毛肚', 'menu', 1.0),
+                ('RCP003', '麻辣方便面', 'menu', 1.0)",
+            [],
+        )?;
+
+        let recipe1_id: i64 = conn.query_row(
+            "SELECT id FROM recipes WHERE code = 'RCP001'",
+            [],
+            |row| row.get(0),
+        )?;
+        let recipe2_id: i64 = conn.query_row(
+            "SELECT id FROM recipes WHERE code = 'RCP002'",
+            [],
+            |row| row.get(0),
+        )?;
+        let recipe3_id: i64 = conn.query_row(
+            "SELECT id FROM recipes WHERE code = 'RCP003'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        conn.execute(
+            "INSERT INTO recipe_items (recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no) VALUES
+                (?1, 'material', ?2, 0.5, ?3, 0.05, 1),
+                (?1, 'material', ?4, 0.1, ?3, 0, 2),
+                (?1, 'material', ?5, 0.02, ?6, 0, 3)",
+            params![recipe1_id, dongfengluo_id, kg_unit_id, maladiliu_id, lajiaoyou_id, l_unit_id],
+        )?;
+
+        conn.execute(
+            "INSERT INTO recipe_items (recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no) VALUES
+                (?1, 'material', ?2, 0.3, ?3, 0.1, 1),
+                (?1, 'material', ?4, 0.08, ?3, 0, 2),
+                (?1, 'material', ?5, 0.015, ?6, 0, 3),
+                (?1, 'material', ?7, 0.05, ?3, 0.1, 4)",
+            params![recipe2_id, maodu_id, kg_unit_id, maladiliu_id, lajiaoyou_id, l_unit_id, xianggu_id],
+        )?;
+
+        conn.execute(
+            "INSERT INTO recipe_items (recipe_id, item_type, ref_id, qty, unit_id, wastage_rate, sort_no) VALUES
+                (?1, 'material', ?2, 1.0, ?3, 0, 1),
+                (?1, 'material', ?4, 0.05, ?5, 0, 2),
+                (?1, 'material', ?6, 0.01, ?7, 0, 3),
+                (?1, 'material', ?8, 0.03, ?5, 0.1, 4)",
+            params![recipe3_id, fangbianmian_id, pc_unit_id, maladiliu_id, kg_unit_id, lajiaoyou_id, l_unit_id, jinzhengu_id],
+        )?;
+
+        conn.execute(
+            "UPDATE menu_items
+             SET recipe_id = CASE code
+               WHEN 'MENU001' THEN ?1
+               WHEN 'MENU011' THEN ?2
+               WHEN 'MENU021' THEN ?3
+               ELSE recipe_id
+             END
+             WHERE code IN ('MENU001', 'MENU011', 'MENU021')",
+            params![recipe1_id, recipe2_id, recipe3_id],
+        )?;
+
+        Ok(())
+    }
+
     pub fn get_recipe_with_items(&self, recipe_id: i64) -> Result<RecipeWithItems> {
         let conn = self.conn.lock().unwrap();
         let recipe = conn.query_row(
@@ -1616,11 +1882,45 @@ impl Database {
 
     pub fn create_recipe(&self, code: &str, name: &str, recipe_type: &str, output_qty: f64, output_material_id: Option<i64>, output_state_id: Option<i64>, output_unit_id: Option<i64>) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO recipes (code, name, recipe_type, output_qty, output_material_id, output_state_id, output_unit_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![code, name, recipe_type, output_qty, output_material_id, output_state_id, output_unit_id],
-        )?;
-        Ok(conn.last_insert_rowid())
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName("配方名稱不能為空".to_string()));
+        }
+
+        let trimmed_code = code.trim();
+        for _attempt in 0..5 {
+            let candidate_code = if trimmed_code.is_empty() {
+                let max_num: i64 = conn.query_row(
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(code, 4) AS INTEGER)), 0) FROM recipes WHERE code GLOB 'RCP[0-9]*'",
+                    [],
+                    |row| row.get(0),
+                )?;
+                format!("RCP{:03}", max_num + 1)
+            } else {
+                trimmed_code.to_string()
+            };
+
+            let result = conn.execute(
+                "INSERT INTO recipes (code, name, recipe_type, output_qty, output_material_id, output_state_id, output_unit_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![candidate_code, trimmed_name, recipe_type, output_qty, output_material_id, output_state_id, output_unit_id],
+            );
+
+            match result {
+                Ok(_) => return Ok(conn.last_insert_rowid()),
+                Err(err) => {
+                    let is_unique_code_error =
+                        err.to_string().contains("UNIQUE constraint failed: recipes.code");
+
+                    if is_unique_code_error && (trimmed_code.is_empty() || trimmed_code.starts_with("RCP")) {
+                        continue;
+                    }
+
+                    return Err(err.into());
+                }
+            }
+        }
+
+        Err(rusqlite::Error::InvalidParameterName("生成配方編號失敗，請重試".to_string()))
     }
 
     pub fn add_recipe_item(&self, recipe_id: i64, item_type: &str, ref_id: i64, qty: f64, unit_id: i64, wastage_rate: f64, sort_no: i32) -> Result<i64> {
@@ -2027,6 +2327,31 @@ impl Database {
             "UPDATE recipes SET name = COALESCE(?1, name), recipe_type = COALESCE(?2, recipe_type), output_qty = COALESCE(?3, output_qty), cost = ?4 WHERE id = ?5",
             params![name, recipe_type, output_qty, cost, id],
         )?;
+        Ok(())
+    }
+
+    pub fn update_recipe_type(&self, id: i64, code: &str, name: &str, description: Option<&str>, sort_no: i32) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE recipe_types
+             SET code = ?1, name = ?2, description = ?3, sort_no = ?4
+             WHERE id = ?5",
+            params![code.trim(), name.trim(), description, sort_no, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_recipe_type(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let usage_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM recipes WHERE recipe_type = (SELECT code FROM recipe_types WHERE id = ?1) AND is_active = 1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if usage_count > 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!("該配方類型仍被 {} 個配方使用中", usage_count)));
+        }
+        conn.execute("UPDATE recipe_types SET is_active = 0 WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -3279,7 +3604,7 @@ Ok(())
     pub fn create_print_ticket_type(&self, req: &CreatePrintTicketTypeRequest) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO print_ticket_types (code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount, show_lot_no, show_qty_info, show_expiry_date, show_supplier) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30)",
+            "INSERT INTO print_ticket_types (code, name, description, is_active, is_default, show_price, show_seq, show_note_field, station_id, paper_width, font_size, cut_mode, print_speed, print_density, show_order_no, show_table_no, show_dine_type, show_item_name, show_item_qty, show_item_price, show_item_subtotal, show_item_spec, show_item_note, show_created_at, show_total_amount, show_lot_no, show_qty_info, show_expiry_date, show_supplier) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)",
             params![
                 req.code, req.name, req.description, req.is_active as i64, req.is_default as i64,
                 req.show_price as i64, req.show_seq as i64, req.show_note_field as i64, req.station_id,
@@ -4927,4 +5252,3 @@ mod tests {
         assert!(all_templates.len() >= 2);
     }
 }
-

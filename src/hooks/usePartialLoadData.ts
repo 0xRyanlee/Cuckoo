@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Unit, MaterialCategory, TagItem, Material, Recipe, RecipeWithItems,
-  RecipeCostResult, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
+  RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
   TicketWithItems, InventoryBatch, InventorySummary, InventoryTxn, AttributeTemplate,
   Supplier, MaterialState, PurchaseOrder, PurchaseOrderWithItems,
   ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems
@@ -16,6 +16,7 @@ interface AppState {
   tags: TagItem[];
   materials: Material[];
   recipes: Recipe[];
+  recipeTypes: RecipeType[];
   selectedRecipe: RecipeWithItems | null;
   recipeCost: RecipeCostResult | null;
   menuCategories: MenuCategory[];
@@ -45,6 +46,7 @@ interface AppSetters {
   setTags: (v: TagItem[]) => void;
   setMaterials: (v: Material[]) => void;
   setRecipes: (v: Recipe[]) => void;
+  setRecipeTypes: (v: RecipeType[]) => void;
   setSelectedRecipe: (v: RecipeWithItems | null) => void;
   setRecipeCost: (v: RecipeCostResult | null) => void;
   setMenuCategories: (v: MenuCategory[]) => void;
@@ -84,6 +86,7 @@ export function usePartialLoadData(state: AppState, setters: AppSetters) {
       s.setTags(await invoke<TagItem[]>("get_tags"));
       s.setMaterials(await invoke<Material[]>("get_materials"));
       s.setRecipes(await invoke<Recipe[]>("get_recipes"));
+      s.setRecipeTypes(await invoke<RecipeType[]>("get_recipe_types"));
       s.setMenuCategories(await invoke<MenuCategory[]>("get_menu_categories"));
       s.setMenuItems(await invoke<MenuItem[]>("get_menu_items"));
       const fetchedOrders = await invoke<Order[]>("get_orders", { limit: 200, offset: 0 });
@@ -117,6 +120,7 @@ export function usePartialLoadData(state: AppState, setters: AppSetters) {
 
   const loadRecipes = useCallback(async () => {
     s.setRecipes(await invoke<Recipe[]>("get_recipes"));
+    s.setRecipeTypes(await invoke<RecipeType[]>("get_recipe_types"));
   }, [s]);
 
   const loadMenu = useCallback(async () => {

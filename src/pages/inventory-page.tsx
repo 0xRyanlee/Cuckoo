@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import { AlertTriangle, Plus, Package, ArrowUpDown, Trash2, ArrowRightLeft, Sett
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
 import { parseSafeFloat } from "@/lib/utils";
+import { invoke } from "@tauri-apps/api/core";
+import { useLocation, useNavigate } from "react-router-dom";
 
 interface Material {
   id: number;
@@ -19,6 +21,9 @@ interface Material {
   code: string;
   min_qty?: number;
 }
+interface Recipe { id: number; code: string; name: string; recipe_type: string; output_qty: number; }
+interface RecipeItem { id: number; recipe_id: number; item_type: string; ref_id: number; qty: number; unit_id: number; wastage_rate: number; note: string | null; sort_no: number; }
+interface RecipeWithItems { recipe: Recipe; items: RecipeItem[]; }
 
 interface Supplier {
   id: number;
@@ -61,10 +66,12 @@ interface InventoryPageProps {
   inventoryBatches: InventoryBatch[];
   inventoryTxns: InventoryTxn[];
   materials: Material[];
+  recipes: Recipe[];
   suppliers: Supplier[];
   onCreateBatch: (data: {
     material_id: number; lot_no: string; quantity: number; cost_per_unit: number;
     supplier_id: number | null; expiry_date: string | null; production_date: string | null;
+    ice_coating_rate?: number; quality_rate?: number; seasonal_factor?: number;
   }) => void;
   onAdjustInventory: (lot_id: number, qty_delta: number, reason: string) => void;
   onRecordWastage: (lot_id: number, qty: number, wastage_type: string) => void;
@@ -75,9 +82,11 @@ interface InventoryPageProps {
 
 export function InventoryPage({
   inventorySummary, inventoryBatches, inventoryTxns,
-  materials, suppliers, onCreateBatch, onAdjustInventory, onRecordWastage,
+  materials, recipes, suppliers, onCreateBatch, onAdjustInventory, onRecordWastage,
   onUpdateMaterial, searchQuery,
 }: InventoryPageProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const filteredSummary = inventorySummary.filter((s) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -97,15 +106,63 @@ export function InventoryPage({
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [wastageDialogOpen, setWastageDialogOpen] = useState(false);
   const [thresholdDialogOpen, setThresholdDialogOpen] = useState(false);
-  const [batchForm, setBatchForm] = useState({ material_id: "", lot_no: "", quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "" });
+  const [usageDialogOpen, setUsageDialogOpen] = useState(false);
+  const [usageBatch, setUsageBatch] = useState<InventoryBatch | null>(null);
+  const [batchForm, setBatchForm] = useState({ material_id: "", lot_no: "", quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "", ice_coating_rate: "", quality_rate: "", seasonal_factor: "1.0" });
   const [adjustForm, setAdjustForm] = useState({ lot_id: 0, qty_delta: "", reason: "" });
   const [adjustDirection, setAdjustDirection] = useState<"add" | "sub">("add");
   const [wastageForm, setWastageForm] = useState({ lot_id: 0, qty: "", wastage_type: "normal" });
   const [thresholdForm, setThresholdForm] = useState({ material_id: 0, min_qty: "10" });
+  const [materialRecipeMap, setMaterialRecipeMap] = useState<Record<number, Recipe[]>>({});
 
   const minQtyMap = Object.fromEntries(materials.map((m) => [m.id, m.min_qty ?? 10]));
   const getMinQty = (materialId: number) => minQtyMap[materialId] ?? 10;
   const lowStockItems = filteredSummary.filter((s) => s.available_qty < getMinQty(s.material_id));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMaterialUsage() {
+      try {
+        const recipeDetails = await Promise.all(
+          recipes.map((recipe) => invoke<RecipeWithItems>("get_recipe_with_items", { recipeId: recipe.id })),
+        );
+        const nextMap: Record<number, Recipe[]> = {};
+        for (const detail of recipeDetails) {
+          for (const item of detail.items) {
+            if (item.item_type !== "material") continue;
+            if (!nextMap[item.ref_id]) nextMap[item.ref_id] = [];
+            nextMap[item.ref_id].push(detail.recipe);
+          }
+        }
+        if (!cancelled) {
+          setMaterialRecipeMap(nextMap);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error("加载批次影响配方失败", e);
+        }
+      }
+    }
+
+    if (recipes.length > 0) {
+      loadMaterialUsage();
+    } else {
+      setMaterialRecipeMap({});
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recipes]);
+
+  useEffect(() => {
+    const routeState = location.state as { materialId?: number } | null;
+    if (!routeState?.materialId) return;
+    setBatchForm((prev) => ({ ...prev, material_id: String(routeState.materialId), lot_no: generateLotNo() }));
+    setBatchDialogOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   async function saveThreshold() {
     const qty = parseInt(thresholdForm.min_qty);
@@ -140,8 +197,22 @@ export function InventoryPage({
   }
 
   function openBatchDialog() {
-    setBatchForm({ material_id: "", lot_no: generateLotNo(), quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "" });
+    setBatchForm({ material_id: "", lot_no: generateLotNo(), quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "", ice_coating_rate: "", quality_rate: "", seasonal_factor: "1.0" });
     setBatchDialogOpen(true);
+  }
+
+  function openBatchDialogForMaterial(materialId: number) {
+    setBatchForm({ material_id: String(materialId), lot_no: generateLotNo(), quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "", ice_coating_rate: "", quality_rate: "", seasonal_factor: "1.0" });
+    setBatchDialogOpen(true);
+  }
+
+  function openUsageDialog(batch: InventoryBatch) {
+    setUsageBatch(batch);
+    setUsageDialogOpen(true);
+  }
+
+  function goToRecipe(recipeId: number) {
+    navigate("/recipes", { state: { recipeId } });
   }
 
   function handleCreateBatch() {
@@ -167,8 +238,11 @@ export function InventoryPage({
       supplier_id: batchForm.supplier_id ? parseInt(batchForm.supplier_id) : null,
       expiry_date: batchForm.expiry_date || null,
       production_date: batchForm.production_date || null,
+      ice_coating_rate: batchForm.ice_coating_rate ? parseFloat(batchForm.ice_coating_rate) : undefined,
+      quality_rate: batchForm.quality_rate ? parseFloat(batchForm.quality_rate) : undefined,
+      seasonal_factor: batchForm.seasonal_factor ? parseFloat(batchForm.seasonal_factor) : 1.0,
     });
-    setBatchForm({ material_id: "", lot_no: "", quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "" });
+    setBatchForm({ material_id: "", lot_no: "", quantity: "", cost_per_unit: "", supplier_id: "", expiry_date: "", production_date: "", ice_coating_rate: "", quality_rate: "", seasonal_factor: "1.0" });
     setBatchDialogOpen(false);
   }
 
@@ -307,6 +381,7 @@ function handleAdjust() {
                       <TableHead>批次号</TableHead>
                       <TableHead className="text-right">数量</TableHead>
                       <TableHead>效期</TableHead>
+                      <TableHead>影响配方</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -328,8 +403,20 @@ function handleAdjust() {
                             </span>
                           ) : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
+                        <TableCell>
+                          {(materialRecipeMap[batch.material_id]?.length || 0) > 0 ? (
+                            <Button variant="outline" size="sm" onClick={() => openUsageDialog(batch)}>
+                              查看 {materialRecipeMap[batch.material_id].length} 个配方
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">未影响配方</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openBatchDialogForMaterial(batch.material_id)} title="为同一材料补批次">
+                              <Plus className="h-3 w-3" />
+                            </Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setAdjustForm({ lot_id: batch.id, qty_delta: "", reason: "" }); setAdjustDirection("add"); setAdjustDialogOpen(true); }}>
                               <ArrowUpDown className="h-3 w-3" />
                             </Button>
@@ -434,6 +521,24 @@ function handleAdjust() {
                 <Input id="batch-expiry" type="date" value={batchForm.expiry_date} onChange={(e) => setBatchForm({ ...batchForm, expiry_date: e.target.value })} />
               </div>
             </div>
+            
+            <div className="border-t pt-4 mt-2">
+              <Label className="text-sm font-medium mb-2 block">属性字段（可选）</Label>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="batch-ice" className="text-xs text-muted-foreground">冰衣率 (%)</Label>
+                  <Input id="batch-ice" type="number" value={batchForm.ice_coating_rate} onChange={(e) => setBatchForm({ ...batchForm, ice_coating_rate: e.target.value })} placeholder="0" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="batch-quality" className="text-xs text-muted-foreground">品质等级 (%)</Label>
+                  <Input id="batch-quality" type="number" value={batchForm.quality_rate} onChange={(e) => setBatchForm({ ...batchForm, quality_rate: e.target.value })} placeholder="100" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="batch-seasonal" className="text-xs text-muted-foreground">季节系数</Label>
+                  <Input id="batch-seasonal" type="number" step="0.1" value={batchForm.seasonal_factor} onChange={(e) => setBatchForm({ ...batchForm, seasonal_factor: e.target.value })} placeholder="1.0" />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBatchDialogOpen(false)}>取消</Button>
@@ -523,6 +628,32 @@ function handleAdjust() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setThresholdDialogOpen(false)}>取消</Button>
             <Button onClick={saveThreshold}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={usageDialogOpen} onOpenChange={setUsageDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>批次影响配方 - {usageBatch?.lot_no}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-4">
+            {(usageBatch && materialRecipeMap[usageBatch.material_id]?.length) ? (
+              materialRecipeMap[usageBatch.material_id].map((recipe) => (
+                <div key={recipe.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <p className="font-medium">{recipe.name}</p>
+                    <p className="text-xs text-muted-foreground">{recipe.code}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => goToRecipe(recipe.id)}>
+                    查看配方
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <EmptyState icon={Package} title="暂无影响配方" description="这个材料当前没有被任何配方使用" />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setUsageDialogOpen(false)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

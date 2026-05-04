@@ -1,119 +1,215 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Settings, Database, Wifi, WifiOff, Monitor, Copy, Bug, AlertTriangle } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Settings, Database, Wifi, WifiOff, Monitor, Copy, Bug, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { appLogger, type LogEntry, type ErrorCategory } from "@/lib/logger";
 
 interface SettingsPageProps {
   connected: boolean;
 }
 
-interface ErrorReport {
-  timestamp: string;
-  app_version: string;
-  platform: string;
-  arch: string;
-  db_path: string;
-  db_status: string;
-  backend_status: string;
-  recent_errors: string[];
-  system_info: Record<string, string>;
+// ── Category display config ──────────────────────────────────────────────────
+
+const CATEGORY_CONFIG: Record<ErrorCategory, { label: string; className: string }> = {
+  db:         { label: "数据库",   className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" },
+  not_found:  { label: "查无数据", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" },
+  validation: { label: "参数错误", className: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300" },
+  ipc:        { label: "IPC 连线", className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300" },
+  print:      { label: "打印机",   className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" },
+  render:     { label: "界面崩溃", className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300" },
+  runtime:    { label: "JS 运行期", className: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300" },
+  logic:      { label: "业务逻辑", className: "bg-muted text-muted-foreground" },
+};
+
+const FILTER_OPTIONS: Array<{ key: ErrorCategory | "all"; label: string }> = [
+  { key: "all",      label: "全部" },
+  { key: "db",       label: "数据库" },
+  { key: "ipc",      label: "IPC" },
+  { key: "runtime",  label: "JS" },
+  { key: "render",   label: "崩溃" },
+  { key: "logic",    label: "逻辑" },
+  { key: "print",    label: "打印机" },
+];
+
+function timeAgo(isoStr: string): string {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "刚才";
+  if (m < 60) return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} 小时前`;
+  return `${Math.floor(h / 24)} 天前`;
 }
 
-export function SettingsPage({ connected }: SettingsPageProps) {
-  const [errorReport, setErrorReport] = useState<ErrorReport | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [showReport, setShowReport] = useState(false);
+// ── Error log panel ──────────────────────────────────────────────────────────
 
-  async function generateErrorReport() {
-    setGenerating(true);
-    try {
-      const report: ErrorReport = {
-        timestamp: new Date().toISOString(),
-        app_version: "1.0.0",
-        platform: navigator.platform,
-        arch: navigator.userAgent.includes("ARM") || navigator.userAgent.includes("arm") ? "arm64" : "x64",
-        db_path: "~/Library/Application Support/Cuckoo/cuckoo.db",
-        db_status: "unknown",
-        backend_status: connected ? "connected" : "disconnected",
-        recent_errors: [],
-        system_info: {
-          userAgent: navigator.userAgent,
-          language: navigator.language,
-          screenWidth: window.screen.width.toString(),
-          screenHeight: window.screen.height.toString(),
-          colorDepth: window.screen.colorDepth.toString(),
-          devicePixelRatio: window.devicePixelRatio.toString(),
-        },
-      };
+function ErrorLogPanel() {
+  const [entries, setEntries] = useState<LogEntry[]>([]);
+  const [filter, setFilter] = useState<ErrorCategory | "all">("all");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-      // Try to get DB status
-      try {
-        const result = await invoke<string>("health_check");
-        report.db_status = result === "ok" ? "healthy" : "unhealthy";
-      } catch (e) {
-        report.db_status = `error: ${String(e)}`;
-      }
+  const refresh = useCallback(() => {
+    setEntries(appLogger.getRecent(60));
+  }, []);
 
-      // Collect recent errors from localStorage if any
-      try {
-        const storedErrors = localStorage.getItem("cuckoo_errors");
-        if (storedErrors) {
-          report.recent_errors = JSON.parse(storedErrors);
-        }
-      } catch {
-        // ignore
-      }
+  useEffect(() => {
+    refresh();
+    // Stay in sync when new errors arrive while user is on this page
+    const handler = () => refresh();
+    window.addEventListener("cuckoo:logged", handler);
+    return () => window.removeEventListener("cuckoo:logged", handler);
+  }, [refresh]);
 
-      setErrorReport(report);
-      setShowReport(true);
-    } catch (e) {
-      toast.error("生成报告失败", { description: String(e) });
-    } finally {
-      setGenerating(false);
-    }
+  function handleClear() {
+    appLogger.clear();
+    setEntries([]);
+    toast.success("错误记录已清除");
   }
 
-  function copyReport() {
-    if (!errorReport) return;
-    const text = [
+  function handleCopyReport() {
+    const recent = appLogger.getRecent(60);
+    const lines = [
       "=== Cuckoo 错误报告 ===",
-      `生成时间: ${errorReport.timestamp}`,
-      `应用版本: ${errorReport.app_version}`,
-      `平台: ${errorReport.platform}`,
-      `架构: ${errorReport.arch}`,
-      `数据库路径: ${errorReport.db_path}`,
-      `数据库状态: ${errorReport.db_status}`,
-      `后端状态: ${errorReport.backend_status}`,
+      `生成时间: ${new Date().toISOString()}`,
+      `版本: 1.2.2`,
+      `平台: ${navigator.platform}`,
+      `UA: ${navigator.userAgent}`,
+      `URL: ${location.href}`,
       "",
-      "--- 系统信息 ---",
-      ...Object.entries(errorReport.system_info).map(([k, v]) => `${k}: ${v}`),
-      "",
-      "--- 最近错误 ---",
-      ...(errorReport.recent_errors.length > 0 ? errorReport.recent_errors : ["无"]),
-      "",
+      "--- 结构化日志 (JSON) ---",
+      JSON.stringify(recent, null, 2),
       "=== 报告结束 ===",
     ].join("\n");
 
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success("报告已复制到剪贴板");
-    }).catch(() => {
-      toast.error("复制失败");
-    });
+    navigator.clipboard.writeText(lines)
+      .then(() => toast.success("报告已复制，可发给开发者"))
+      .catch(() => toast.error("复制失败，请手动截图"));
   }
 
-  function clearErrors() {
-    localStorage.removeItem("cuckoo_errors");
-    toast.success("错误记录已清除");
-  }
+  const filtered = filter === "all" ? entries : entries.filter((e) => e.category === filter);
+  const counts = entries.reduce<Partial<Record<ErrorCategory | "all", number>>>((acc, e) => {
+    acc.all = (acc.all ?? 0) + 1;
+    acc[e.category] = (acc[e.category] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-3">
+      {/* Summary bar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {FILTER_OPTIONS.map(({ key, label }) => {
+            const count = counts[key] ?? 0;
+            if (key !== "all" && count === 0) return null;
+            return (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors
+                  ${filter === key
+                    ? "bg-foreground text-background"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+              >
+                {label}
+                {count > 0 && <span className="opacity-70">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={refresh}>
+            <RefreshCw className="h-3 w-3" />
+            刷新
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground" onClick={handleClear}>
+            <Trash2 className="h-3 w-3" />
+            清除
+          </Button>
+        </div>
+      </div>
+
+      {/* Log list */}
+      {filtered.length === 0 ? (
+        <div className="flex items-center justify-center rounded-lg border border-dashed py-10 text-sm text-muted-foreground">
+          {entries.length === 0 ? "暂无错误记录" : "此分类无记录"}
+        </div>
+      ) : (
+        <ScrollArea className="h-72 rounded-md border">
+          <div className="divide-y">
+            {filtered.map((entry) => {
+              const cfg = CATEGORY_CONFIG[entry.category];
+              const isExpanded = expanded === entry.id;
+              return (
+                <div
+                  key={entry.id}
+                  className="px-3 py-2 hover:bg-accent/30 cursor-pointer transition-colors"
+                  onClick={() => setExpanded(isExpanded ? null : entry.id)}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${cfg.className}`}>
+                      {cfg.label}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-mono text-muted-foreground truncate">{entry.operation}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground/60">{timeAgo(entry.ts)}</span>
+                      </div>
+                      <p className="text-xs mt-0.5 break-all">{entry.message}</p>
+                      {isExpanded && (
+                        <div className="mt-2 space-y-1">
+                          {entry.context && (
+                            <pre className="text-[10px] font-mono bg-muted/60 rounded p-2 overflow-x-auto whitespace-pre-wrap">
+                              {JSON.stringify(entry.context, null, 2)}
+                            </pre>
+                          )}
+                          {entry.stack && (
+                            <pre className="text-[10px] font-mono bg-muted/60 rounded p-2 overflow-x-auto whitespace-pre-wrap text-muted-foreground">
+                              {entry.stack}
+                            </pre>
+                          )}
+                          <p className="text-[10px] text-muted-foreground/50">{entry.ts}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      )}
+
+      {/* Copy report button */}
+      <Button onClick={handleCopyReport} className="w-full gap-2" variant="outline">
+        <Copy className="h-4 w-4" />
+        复制完整错误报告（供开发者诊断）
+      </Button>
+    </div>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
+
+export function SettingsPage({ connected }: SettingsPageProps) {
+  const [dbStatus, setDbStatus] = useState<string>("檢查中...");
+
+  useEffect(() => {
+    invoke<string>("health_check")
+      .then((r) => setDbStatus(r === "ok" ? "正常" : "異常"))
+      .catch(() => setDbStatus("連線失敗"));
+  }, []);
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">系统设置</h2>
-        <p className="text-sm text-muted-foreground">系统信息和故障诊断</p>
+        <p className="text-sm text-muted-foreground">系统信息与故障诊断</p>
       </div>
 
       {/* System Info */}
@@ -129,22 +225,24 @@ export function SettingsPage({ connected }: SettingsPageProps) {
             <div className="flex items-center gap-3">
               <Monitor className="h-4 w-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">系统版本</p>
+                <p className="text-sm font-medium">应用版本</p>
                 <p className="text-xs text-muted-foreground">当前安装的版本</p>
               </div>
             </div>
-            <span className="text-sm font-mono text-muted-foreground">v1.0.0</span>
+            <span className="text-sm font-mono text-muted-foreground">v1.2.4</span>
           </div>
           <Separator />
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
               <Database className="h-4 w-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">数据库路径</p>
-                <p className="text-xs text-muted-foreground">SQLite 本地存储位置</p>
+                <p className="text-sm font-medium">数据库状态</p>
+                <p className="text-xs text-muted-foreground">SQLite 本地存储</p>
               </div>
             </div>
-            <span className="text-xs font-mono text-muted-foreground">~/Library/Application Support/Cuckoo/cuckoo.db</span>
+            <Badge variant={dbStatus === "正常" ? "secondary" : "destructive"} className="text-xs">
+              {dbStatus}
+            </Badge>
           </div>
           <Separator />
           <div className="flex items-center justify-between py-3">
@@ -155,65 +253,30 @@ export function SettingsPage({ connected }: SettingsPageProps) {
                 <WifiOff className="h-4 w-4 text-destructive" />
               )}
               <div>
-                <p className="text-sm font-medium">连接状态</p>
-                <p className="text-xs text-muted-foreground">后端服务连接情况</p>
+                <p className="text-sm font-medium">后端连线</p>
+                <p className="text-xs text-muted-foreground">Tauri IPC 状态</p>
               </div>
             </div>
             <span className={`text-sm font-medium ${connected ? "text-emerald-500" : "text-destructive"}`}>
-              {connected ? "已连接" : "未连接"}
+              {connected ? "已连线" : "未连线"}
             </span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Error Report Generator */}
+      {/* Error Log Panel */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Bug className="h-4 w-4" />
-            故障诊断
+            错误记录
           </CardTitle>
-          <CardDescription>生成错误报告以协助调试问题</CardDescription>
+          <CardDescription>
+            应用运行期间自动收集的前端错误。点击任一条目可展开详情，复制报告后发给开发者。
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Button onClick={generateErrorReport} disabled={generating} className="gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              {generating ? "生成中..." : "生成错误报告"}
-            </Button>
-            <Button variant="outline" onClick={clearErrors} className="gap-2">
-              清除错误记录
-            </Button>
-          </div>
-
-          {showReport && errorReport && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">报告预览</p>
-                <Button variant="outline" size="sm" onClick={copyReport} className="gap-1">
-                  <Copy className="h-3 w-3" />复制报告
-                </Button>
-              </div>
-              <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-64 whitespace-pre-wrap font-mono">
-{`=== Cuckoo 错误报告 ===
-生成时间: ${errorReport.timestamp}
-应用版本: ${errorReport.app_version}
-平台: ${errorReport.platform}
-架构: ${errorReport.arch}
-数据库路径: ${errorReport.db_path}
-数据库状态: ${errorReport.db_status}
-后端状态: ${errorReport.backend_status}
-
---- 系统信息 ---
-${Object.entries(errorReport.system_info).map(([k, v]) => `${k}: ${v}`).join("\n")}
-
---- 最近错误 ---
-${errorReport.recent_errors.length > 0 ? errorReport.recent_errors.join("\n") : "无"}
-
-=== 报告结束 ===`}
-              </pre>
-            </div>
-          )}
+        <CardContent>
+          <ErrorLogPanel />
         </CardContent>
       </Card>
     </div>

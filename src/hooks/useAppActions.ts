@@ -48,6 +48,32 @@ export function useAppActions({
   setSelectedProductionOrder,
   setSelectedStocktake,
 }: UseAppActionsParams) {
+  function normalizeRecipeWithItems(raw: unknown): RecipeWithItems {
+    if (raw && typeof raw === "object" && "recipe" in raw && "items" in raw) {
+      return raw as RecipeWithItems;
+    }
+
+    if (raw && typeof raw === "object" && "items" in raw) {
+      const flattened = raw as Record<string, unknown>;
+      const { items, ...recipe } = flattened;
+      return {
+        recipe: recipe as unknown as Recipe,
+        items: Array.isArray(items) ? items as RecipeWithItems["items"] : [],
+      };
+    }
+
+    throw new Error("Invalid recipe payload shape");
+  }
+
+  async function refreshRecipeSelection(recipeId: number) {
+    const [rawData, cost] = await Promise.all([
+      invoke<unknown>("get_recipe_with_items", { recipeId }),
+      invoke<RecipeCostResult>("calculate_recipe_cost", { recipeId }),
+    ]);
+    const data = normalizeRecipeWithItems(rawData);
+    setSelectedRecipe(data);
+    setRecipeCost(cost);
+  }
 
   // Single helper: logs + toasts every action error.
   // operation = Tauri command name (or compound name for multi-step flows).
@@ -99,17 +125,19 @@ export function useAppActions({
   };
 
   // 配方
-  const handleCreateRecipe = async (data: { code: string; name: string }) => {
-    try { await invoke("create_recipe", { req: { ...data, recipe_type: "menu", output_qty: 1.0, output_material_id: null, output_state_id: null, output_unit_id: null, items: null } }); toast.success("配方已创建", { description: data.name }); loadData(); }
-    catch (e) { logError("create_recipe", e, "创建配方失败", { name: data.name }); }
+  const handleCreateRecipe = async (data: { code: string; name: string; recipe_type: string }): Promise<number | null> => {
+    try { 
+      const newId = await invoke<number>("create_recipe", { req: { ...data, output_qty: 1.0, output_material_id: null, output_state_id: null, output_unit_id: null, items: null } }); 
+      toast.success("配方已创建", { description: data.name }); 
+      await loadData(); 
+      return newId;
+    }
+    catch (e) { logError("create_recipe", e, "创建配方失败", { name: data.name }); return null; }
   };
 
   const handleViewRecipe = async (recipe: Recipe) => {
     try {
-      const data = await invoke<RecipeWithItems>("get_recipe_with_items", { recipeId: recipe.id });
-      setSelectedRecipe(data);
-      const cost = await invoke<RecipeCostResult>("calculate_recipe_cost", { recipeId: recipe.id });
-      setRecipeCost(cost);
+      await refreshRecipeSelection(recipe.id);
     } catch (e) { logError("get_recipe_with_items", e, "加载配方失败", { recipe_id: recipe.id }); }
   };
 
@@ -118,23 +146,115 @@ export function useAppActions({
     catch (e) { logError("delete_recipe", e, "删除配方失败", { id }); }
   };
 
-  const handleUpdateRecipe = async (id: number, name: string, output_qty: number) => {
-    try { await invoke("update_recipe", { id, name, outputQty: output_qty }); toast.success("配方已更新"); loadData(); }
+  const handleUpdateRecipe = async (id: number, data: { name: string; recipe_type: string; output_qty: number }) => {
+    try {
+      await invoke("update_recipe", { id, name: data.name, recipeType: data.recipe_type, outputQty: data.output_qty });
+      await Promise.all([loadData(), refreshRecipeSelection(id)]);
+      toast.success("配方已更新");
+    }
     catch (e) { logError("update_recipe", e, "更新配方失败", { id }); }
   };
 
+  const handleCreateRecipeType = async (data: { code: string; name: string; description?: string | null; sort_no?: number }) => {
+    try {
+      await invoke("create_recipe_type", { req: data });
+      toast.success("配方类型已创建", { description: data.name });
+      await loadData();
+    } catch (e) { logError("create_recipe_type", e, "创建配方类型失败", { code: data.code }); }
+  };
+
+  const handleUpdateRecipeType = async (id: number, data: { code: string; name: string; description?: string | null; sort_no: number }) => {
+    try {
+      await invoke("update_recipe_type", { id, code: data.code, name: data.name, description: data.description ?? null, sortNo: data.sort_no });
+      toast.success("配方类型已更新");
+      await loadData();
+    } catch (e) { logError("update_recipe_type", e, "更新配方类型失败", { id }); }
+  };
+
+  const handleDeleteRecipeType = async (id: number) => {
+    try {
+      await invoke("delete_recipe_type", { id });
+      toast.success("配方类型已删除");
+      await loadData();
+    } catch (e) { logError("delete_recipe_type", e, "删除配方类型失败", { id }); }
+  };
+
+  const handleSeedSampleRecipes = async () => {
+    try {
+      await invoke("seed_sample_recipes");
+      setSelectedRecipe(null);
+      setRecipeCost(null);
+      await loadData();
+      toast.success("示例配方已创建");
+    } catch (e) { logError("seed_sample_recipes", e, "创建示例配方失败"); }
+  };
+
+  const handleCreatePendingRecipeForMenu = async (menuItemId: number, menuItemName: string): Promise<number | null> => {
+    try {
+      const code = await invoke<string>("generate_recipe_code");
+      const recipeId = await invoke<number>("create_recipe", {
+        req: {
+          code,
+          name: menuItemName.trim(),
+          recipe_type: "menu",
+          output_qty: 1.0,
+          output_material_id: null,
+          output_state_id: null,
+          output_unit_id: null,
+          items: null,
+        },
+      });
+      await invoke("update_menu_item", {
+        id: menuItemId,
+        name: null,
+        categoryId: null,
+        recipeId,
+        salesPrice: null,
+      });
+      await loadData();
+      toast.success("已加入配方清单", { description: `${menuItemName} 已标记为待完善` });
+      return recipeId;
+    } catch (e) { logError("create_pending_recipe_for_menu", e, "加入配方清单失败", { menu_item_id: menuItemId }); return null; }
+  };
+
+  const handleBindMenuItemToRecipe = async (menuItemId: number, recipeId: number) => {
+    try {
+      await invoke("update_menu_item", {
+        id: menuItemId,
+        name: null,
+        categoryId: null,
+        recipeId,
+        salesPrice: null,
+      });
+      await loadData();
+      toast.success("菜单已绑定配方");
+    } catch (e) { logError("bind_menu_item_to_recipe", e, "绑定菜单失败", { menu_item_id: menuItemId, recipe_id: recipeId }); }
+  };
+
   const handleAddRecipeItem = async (recipe_id: number, item_type: string, ref_id: number, qty: number, unit_id: number, wastage_rate: number) => {
-    try { await invoke("add_recipe_item", { recipeId: recipe_id, req: { item_type, ref_id, qty, unit_id, wastage_rate } }); toast.success("配方项已添加"); }
+    try {
+      await invoke("add_recipe_item", { recipeId: recipe_id, req: { item_type, ref_id, qty, unit_id, wastage_rate } });
+      await refreshRecipeSelection(recipe_id);
+      toast.success("配方项已添加");
+    }
     catch (e) { logError("add_recipe_item", e, "添加配方项失败", { recipe_id, ref_id }); }
   };
 
-  const handleDeleteRecipeItem = async (item_id: number) => {
-    try { await invoke("delete_recipe_item", { itemId: item_id }); toast.success("配方项已删除"); }
+  const handleDeleteRecipeItem = async (item_id: number, recipe_id: number) => {
+    try {
+      await invoke("delete_recipe_item", { itemId: item_id });
+      await refreshRecipeSelection(recipe_id);
+      toast.success("配方项已删除");
+    }
     catch (e) { logError("delete_recipe_item", e, "删除配方项失败", { item_id }); }
   };
 
-  const handleUpdateRecipeItem = async (item_id: number, qty: number, wastage_rate: number) => {
-    try { await invoke("update_recipe_item", { itemId: item_id, qty, wastageRate: wastage_rate }); toast.success("配方项已更新"); }
+  const handleUpdateRecipeItem = async (item_id: number, recipe_id: number, qty: number, wastage_rate: number) => {
+    try {
+      await invoke("update_recipe_item", { itemId: item_id, qty, wastageRate: wastage_rate });
+      await refreshRecipeSelection(recipe_id);
+      toast.success("配方项已更新");
+    }
     catch (e) { logError("update_recipe_item", e, "更新配方项失败", { item_id }); }
   };
 
@@ -383,9 +503,9 @@ export function useAppActions({
   };
 
   // 批次
-  const handleCreateBatch = async (data: { material_id: number; lot_no: string; quantity: number; cost_per_unit: number; supplier_id: number | null; expiry_date: string | null; production_date: string | null }) => {
+  const handleCreateBatch = async (data: { material_id: number; lot_no: string; quantity: number; cost_per_unit: number; supplier_id: number | null; expiry_date: string | null; production_date: string | null; ice_coating_rate?: number | null; quality_rate?: number | null; seasonal_factor?: number }) => {
     try {
-      await invoke("create_inventory_batch", { req: { material_id: data.material_id, state_id: null, lot_no: data.lot_no, supplier_id: data.supplier_id, brand: null, spec: null, quantity: data.quantity, cost_per_unit: data.cost_per_unit, production_date: data.production_date, expiry_date: data.expiry_date, ice_coating_rate: null, quality_rate: null, seasonal_factor: 1.0 } });
+      await invoke("create_inventory_batch", { req: { material_id: data.material_id, state_id: null, lot_no: data.lot_no, supplier_id: data.supplier_id, brand: null, spec: null, quantity: data.quantity, cost_per_unit: data.cost_per_unit, production_date: data.production_date, expiry_date: data.expiry_date, ice_coating_rate: data.ice_coating_rate ?? null, quality_rate: data.quality_rate ?? null, seasonal_factor: data.seasonal_factor ?? 1.0 } });
       toast.success("批次已创建", { description: data.lot_no });
       const mat = materials.find((m) => m.id === data.material_id);
       const sup = suppliers.find((s) => s.id === data.supplier_id);
@@ -491,7 +611,7 @@ export function useAppActions({
     // 分類與標籤
     handleCreateCategory, handleDeleteCategory, handleCreateTag, handleDeleteTag,
     // 配方
-    handleCreateRecipe, handleViewRecipe, handleDeleteRecipe, handleUpdateRecipe, handleAddRecipeItem, handleDeleteRecipeItem, handleUpdateRecipeItem, handleRecalculateCost,
+    handleCreateRecipe, handleViewRecipe, handleDeleteRecipe, handleUpdateRecipe, handleCreateRecipeType, handleUpdateRecipeType, handleDeleteRecipeType, handleSeedSampleRecipes, handleCreatePendingRecipeForMenu, handleBindMenuItemToRecipe, handleAddRecipeItem, handleDeleteRecipeItem, handleUpdateRecipeItem, handleRecalculateCost,
     // 菜單
     handleCreateMenuCategory, handleUpdateMenuCategory, handleDeleteMenuCategory, handleCreateMenuItem, handleToggleMenuItem, handleBatchToggleMenuItem, handleUpdateMenuItem, handleDeleteMenuItem,
     // 訂單

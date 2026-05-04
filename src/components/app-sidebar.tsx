@@ -25,35 +25,40 @@ import { MoreHorizontal, Package, ChefHat, Warehouse, FileText, ShoppingCart, Se
 
 const navGroups = [
   {
-    label: "核心功能",
+    label: "前台操作",
     items: [
-      { id: "dashboard", label: "仪表板", icon: Home },
-      { id: "materials", label: "材料管理", icon: Package },
-      { id: "recipes", label: "配方", icon: ChefHat },
-      { id: "inventory", label: "库存", icon: Warehouse },
+      { id: "pos", label: "POS 点餐", icon: CreditCard },
+      { id: "orders", label: "订单", icon: ShoppingCart },
+      { id: "kds", label: "KDS 厨房", icon: Monitor },
     ],
   },
   {
-    label: "门店运营",
+    label: "后台管理",
     items: [
-      { id: "pos", label: "POS 点餐", icon: CreditCard },
+      { id: "dashboard", label: "仪表板", icon: Home },
       { id: "menu", label: "菜单", icon: FileText },
-      { id: "orders", label: "订单", icon: ShoppingCart },
-      { id: "kds", label: "KDS 厨房", icon: Monitor },
+      { id: "materials", label: "材料管理", icon: Package },
+      { id: "recipes", label: "配方", icon: ChefHat },
+      { id: "inventory", label: "库存", icon: Warehouse },
+      { id: "stocktakes", label: "库存盘点", icon: ClipboardList },
+      { id: "reports", label: "数据报表", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "进货 / 生产",
+    items: [
       { id: "suppliers", label: "供应商", icon: Truck },
       { id: "purchase-orders", label: "采购单", icon: FileBox },
       { id: "production-orders", label: "生产单", icon: Factory },
-      { id: "stocktakes", label: "库存盘点", icon: ClipboardList },
       { id: "material-states", label: "材料状态", icon: Layers },
     ],
   },
-{
-    label: "系統",
+  {
+    label: "设置",
     items: [
       { id: "attributes", label: "属性模板", icon: SlidersHorizontal },
-      { id: "print-templates", label: "打印中心", icon: Printer },
-      { id: "reports", label: "數據報表", icon: BarChart3 },
-      { id: "settings", label: "設置", icon: Settings },
+      { id: "print", label: "打印中心", icon: Printer },
+      { id: "settings", label: "系统设置", icon: Settings },
     ],
   },
 ];

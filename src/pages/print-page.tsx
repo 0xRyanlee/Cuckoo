@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,10 +7,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { invoke } from "@tauri-apps/api/core";
-import { Printer, Copy, Settings, Plus, Pencil, FileText, Tag } from "lucide-react";
+import DOMPurify from "dompurify";
+import { Printer, Copy, ExternalLink, Plus, Pencil, Trash2, Wifi, Search, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { PrintTicketType } from "../types";
+import { PrintTemplatesPage } from "./print-templates-page";
+
+interface PrintTemplate {
+  id: number;
+  name: string;
+  template_type: string;
+  paper_size: string;
+  content: string;
+  is_default: boolean;
+  is_active: boolean;
+}
 
 interface DebugPrintResult {
   file_path: string;
@@ -19,35 +32,454 @@ interface DebugPrintResult {
   byte_count: number;
 }
 
-export function PrintPage() {
-  const [activeTab, setActiveTab] = useState("preview");
-  const navigate = useNavigate();
+interface PrinterConfig {
+  id: number;
+  name: string;
+  printer_type: string;
+  connection_type: string;
+  feie_user: string | null;
+  feie_ukey: string | null;
+  feie_sn: string | null;
+  feie_key: string | null;
+  lan_ip: string | null;
+  lan_port: number;
+  paper_width: string;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+}
 
-  const [ticketTypes, setTicketTypes] = useState<PrintTicketType[]>([]);
-  const [selectedTicketTypeId, setSelectedTicketTypeId] = useState<number | null>(null);
-  const [result, setResult] = useState<DebugPrintResult | null>(null);
-  const [loading, setLoading] = useState(false);
+interface LanPrinter {
+  ip: string;
+  port: number;
+  sn: string | null;
+}
 
+// ── Printers Section ─────────────────────────────────────────────────────────
+
+function PrintersSection() {
+  const [printers, setPrinters] = useState<PrinterConfig[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingTicketType, setEditingTicketType] = useState<PrintTicketType | null>(null);
+  const [editingPrinter, setEditingPrinter] = useState<PrinterConfig | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<PrinterConfig | null>(null);
+  const [scanDialogOpen, setScanDialogOpen] = useState(false);
+  const [subnet, setSubnet] = useState("192.168.1");
+  const [scanning, setScanning] = useState(false);
+  const [scanResults, setScanResults] = useState<LanPrinter[]>([]);
+  const [testingId, setTestingId] = useState<number | null>(null);
+
+  // Form state
+  const [formName, setFormName] = useState("");
+  const [formConnectionType, setFormConnectionType] = useState("lan");
+  const [formLanIp, setFormLanIp] = useState("");
+  const [formLanPort, setFormLanPort] = useState("9100");
+  const [formPaperWidth, setFormPaperWidth] = useState("80mm");
+  const [formIsDefault, setFormIsDefault] = useState(false);
+  const [formFeieUser, setFormFeieUser] = useState("");
+  const [formFeieUkey, setFormFeieUkey] = useState("");
+  const [formFeieSn, setFormFeieSn] = useState("");
 
   useEffect(() => {
-    loadData();
+    loadPrinters();
   }, []);
 
-  async function loadData() {
+  async function loadPrinters() {
     try {
-      const tts = await invoke<PrintTicketType[]>("get_print_ticket_types");
-      setTicketTypes(tts.filter(t => t.is_active));
-      
-      const defaultTt = tts.find(t => t.is_default);
-      if (defaultTt) setSelectedTicketTypeId(defaultTt.id);
+      const data = await invoke<PrinterConfig[]>("get_printers");
+      setPrinters(data.filter(p => p.is_active));
     } catch (e) {
-      toast.error("加载失败", { description: String(e) });
+      toast.error("加载打印机失败", { description: String(e) });
     }
   }
 
-  const selectedTicketType = ticketTypes.find(t => t.id === selectedTicketTypeId);
+  function openNew(prefill?: Partial<{ ip: string; port: number }>) {
+    setEditingPrinter(null);
+    setFormName("");
+    setFormConnectionType("lan");
+    setFormLanIp(prefill?.ip ?? "");
+    setFormLanPort(String(prefill?.port ?? 9100));
+    setFormPaperWidth("80mm");
+    setFormIsDefault(printers.length === 0);
+    setFormFeieUser("");
+    setFormFeieUkey("");
+    setFormFeieSn("");
+    setEditDialogOpen(true);
+  }
+
+  function openEdit(p: PrinterConfig) {
+    setEditingPrinter(p);
+    setFormName(p.name);
+    setFormConnectionType(p.connection_type);
+    setFormLanIp(p.lan_ip ?? "");
+    setFormLanPort(String(p.lan_port));
+    setFormPaperWidth(p.paper_width);
+    setFormIsDefault(p.is_default);
+    setFormFeieUser(p.feie_user ?? "");
+    setFormFeieUkey(p.feie_ukey ?? "");
+    setFormFeieSn(p.feie_sn ?? "");
+    setEditDialogOpen(true);
+  }
+
+  async function savePrinter() {
+    if (!formName.trim()) { toast.error("请填写打印机名称"); return; }
+    if (formConnectionType === "lan" && !formLanIp.trim()) { toast.error("请填写 IP 地址"); return; }
+    if (formConnectionType === "feie" && (!formFeieUser.trim() || !formFeieSn.trim())) {
+      toast.error("请填写飞鹅账户和 SN 号"); return;
+    }
+
+    const base = {
+      name: formName.trim(),
+      printer_type: "thermal",
+      connection_type: formConnectionType,
+      lan_ip: formConnectionType === "lan" ? formLanIp.trim() : null,
+      lan_port: formConnectionType === "lan" ? parseInt(formLanPort) : null,
+      feie_user: formConnectionType === "feie" ? formFeieUser.trim() : null,
+      feie_ukey: formConnectionType === "feie" ? formFeieUkey.trim() : null,
+      feie_sn: formConnectionType === "feie" ? formFeieSn.trim() : null,
+      feie_key: null,
+      paper_width: formPaperWidth,
+      is_default: formIsDefault,
+    };
+
+    try {
+      if (editingPrinter) {
+        await invoke("update_printer", {
+          id: editingPrinter.id,
+          name: base.name,
+          printerType: base.printer_type,
+          connectionType: base.connection_type,
+          feieUser: base.feie_user,
+          feieUkey: base.feie_ukey,
+          feieSn: base.feie_sn,
+          feieKey: null,
+          lanIp: base.lan_ip,
+          lanPort: base.lan_port,
+          paperWidth: base.paper_width,
+          isDefault: base.is_default,
+        });
+        toast.success("打印机已更新");
+      } else {
+        await invoke("create_printer", { req: base });
+        toast.success("打印机已添加");
+      }
+      setEditDialogOpen(false);
+      loadPrinters();
+    } catch (e) {
+      toast.error("保存失败", { description: String(e) });
+    }
+  }
+
+  async function deletePrinter() {
+    if (!deleteConfirm) return;
+    try {
+      await invoke("delete_printer", { id: deleteConfirm.id });
+      toast.success("打印机已删除");
+      setDeleteConfirm(null);
+      loadPrinters();
+    } catch (e) {
+      toast.error("删除失败", { description: String(e) });
+    }
+  }
+
+  async function testPrinter(p: PrinterConfig) {
+    setTestingId(p.id);
+    try {
+      if (p.connection_type === "lan") {
+        const msg = await invoke<string>("test_lan_printer", {
+          ip: p.lan_ip,
+          port: p.lan_port,
+        });
+        toast.success(`测试成功: ${msg}`);
+      } else {
+        const msg = await invoke<string>("test_feie_printer", {
+          user: p.feie_user,
+          ukey: p.feie_ukey,
+          sn: p.feie_sn,
+        });
+        toast.success(`测试成功: ${msg}`);
+      }
+    } catch (e) {
+      toast.error("测试失败", { description: String(e) });
+    } finally {
+      setTestingId(null);
+    }
+  }
+
+  async function startScan() {
+    if (!subnet.trim()) { toast.error("请填写子网段"); return; }
+    setScanning(true);
+    setScanResults([]);
+    try {
+      const results = await invoke<LanPrinter[]>("scan_lan_printers", {
+        subnet: subnet.trim(),
+        timeoutMs: 800,
+      });
+      setScanResults(results);
+      if (results.length === 0) toast.info("未发现局域网打印机");
+      else toast.success(`发现 ${results.length} 台打印机`);
+    } catch (e) {
+      toast.error("扫描失败", { description: String(e) });
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  const connLabel = (p: PrinterConfig) =>
+    p.connection_type === "lan" ? `${p.lan_ip}:${p.lan_port}` : `飞鹅 ${p.feie_sn ?? ""}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">打印机管理</h2>
+          <p className="text-sm text-muted-foreground">配置热敏打印机连接参数</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setScanDialogOpen(true); setScanResults([]); }}>
+            <Search className="h-4 w-4 mr-2" />扫描局域网
+          </Button>
+          <Button onClick={() => openNew()}>
+            <Plus className="h-4 w-4 mr-2" />添加打印机
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {printers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+              <Printer className="h-10 w-10 opacity-30" />
+              <p className="text-sm">暂无打印机，点击"扫描局域网"自动发现或手动添加</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>名称</TableHead>
+                  <TableHead>连接方式</TableHead>
+                  <TableHead>地址</TableHead>
+                  <TableHead>纸宽</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {printers.map(p => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">
+                      {p.name}
+                      {p.is_default && <Badge variant="secondary" className="ml-2 text-xs">默认</Badge>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {p.connection_type === "lan" ? "局域网" : "飞鹅云"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{connLabel(p)}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{p.paper_width}</TableCell>
+                    <TableCell>
+                      {testingId === p.id
+                        ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        : <Wifi className="h-4 w-4 text-muted-foreground" />
+                      }
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-8 text-xs"
+                          disabled={testingId === p.id}
+                          onClick={() => testPrinter(p)}>
+                          测试
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteConfirm(p)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* LAN Scan Dialog */}
+      <Dialog open={scanDialogOpen} onOpenChange={setScanDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>扫描局域网打印机</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>子网段</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={subnet}
+                  onChange={e => setSubnet(e.target.value)}
+                  placeholder="192.168.1"
+                  className="font-mono"
+                />
+                <span className="flex items-center text-sm text-muted-foreground">.0/24</span>
+              </div>
+              <p className="text-xs text-muted-foreground">扫描该子网内所有 9100 端口设备（约需数秒）</p>
+            </div>
+            <Button onClick={startScan} disabled={scanning} className="w-full">
+              {scanning ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />扫描中...</> : <><Search className="h-4 w-4 mr-2" />开始扫描</>}
+            </Button>
+
+            {scanResults.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">发现 {scanResults.length} 台设备</p>
+                <div className="divide-y rounded-md border">
+                  {scanResults.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2">
+                      <div>
+                        <p className="font-mono text-sm">{r.ip}:{r.port}</p>
+                        {r.sn && <p className="text-xs text-muted-foreground">SN: {r.sn}</p>}
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => {
+                        setScanDialogOpen(false);
+                        openNew({ ip: r.ip, port: r.port });
+                      }}>
+                        <Plus className="h-3 w-3 mr-1" />添加
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!scanning && scanResults.length === 0 && (
+              <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
+                <XCircle className="h-4 w-4" />
+                未发现打印机，请确认打印机已开机并在同一网络
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingPrinter ? "编辑打印机" : "添加打印机"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>打印机名称</Label>
+              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="如：厨房打印机" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>连接方式</Label>
+                <Select value={formConnectionType} onValueChange={setFormConnectionType}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lan">局域网 (LAN)</SelectItem>
+                    <SelectItem value="feie">飞鹅云打印</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>纸张宽度</Label>
+                <Select value={formPaperWidth} onValueChange={setFormPaperWidth}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="58mm">58mm</SelectItem>
+                    <SelectItem value="80mm">80mm</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {formConnectionType === "lan" ? (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2 space-y-2">
+                  <Label>IP 地址</Label>
+                  <Input value={formLanIp} onChange={e => setFormLanIp(e.target.value)} placeholder="192.168.1.100" className="font-mono" />
+                </div>
+                <div className="space-y-2">
+                  <Label>端口</Label>
+                  <Input value={formLanPort} onChange={e => setFormLanPort(e.target.value)} className="font-mono" />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>飞鹅账户</Label>
+                  <Input value={formFeieUser} onChange={e => setFormFeieUser(e.target.value)} placeholder="注册手机号" />
+                </div>
+                <div className="space-y-2">
+                  <Label>UKEY</Label>
+                  <Input value={formFeieUkey} onChange={e => setFormFeieUkey(e.target.value)} placeholder="飞鹅开放平台 UKEY" />
+                </div>
+                <div className="space-y-2">
+                  <Label>打印机 SN</Label>
+                  <Input value={formFeieSn} onChange={e => setFormFeieSn(e.target.value)} placeholder="打印机机身号" className="font-mono" />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-1">
+              <Checkbox id="is-default" checked={formIsDefault} onCheckedChange={v => setFormIsDefault(!!v)} />
+              <Label htmlFor="is-default" className="cursor-pointer">设为默认打印机</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>取消</Button>
+            <Button onClick={savePrinter}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>确认删除</DialogTitle></DialogHeader>
+          <p className="py-4 text-sm text-muted-foreground">
+            确定要删除打印机「{deleteConfirm?.name}」吗？此操作不可撤销。
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>取消</Button>
+            <Button variant="destructive" onClick={deletePrinter}>删除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Main Print Page ───────────────────────────────────────────────────────────
+
+export function PrintPage() {
+  const [activeTab, setActiveTab] = useState("preview");
+
+  const [templates, setTemplates] = useState<PrintTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [result, setResult] = useState<DebugPrintResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  async function loadTemplates() {
+    try {
+      const data = await invoke<PrintTemplate[]>("get_print_templates");
+      const activeTemplates = data.filter(t => t.is_active);
+      setTemplates(activeTemplates);
+      const defaultTpl = activeTemplates.find(t => t.is_default);
+      if (defaultTpl) setSelectedTemplateId(defaultTpl.id);
+    } catch (e) {
+      toast.error("加载模板失败", { description: String(e) });
+    }
+  }
+
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
 
   const [orderNo, setOrderNo] = useState("ORD20260426001");
   const [dineType, setDineType] = useState("堂食");
@@ -73,46 +505,33 @@ export function PrintPage() {
   };
 
   const renderTicketMockup = () => {
-    const t = selectedTicketType;
+    const t = selectedTemplate;
     const items = parseItems();
-    
     return (
-      <div 
-        className="thermal-paper font-mono text-xs leading-tight" 
-        style={{ width: t?.paper_width === "80mm" ? "300px" : t?.paper_width === "50mm" ? "180px" : "220px" }}
-      >
+      <div className="thermal-paper font-mono text-xs leading-tight"
+        style={{ width: t?.paper_size === "80mm" ? "300px" : "260px" }}>
         <div className="text-center border-b-2 border-dashed border-gray-400 pb-2 mb-2">
-          {t?.show_dine_type && <div className="text-lg font-bold">{t.name}</div>}
-          {t?.show_order_no && <div className="text-sm">ORDER: {orderNo}</div>}
-          {t?.show_table_no && <div className="text-xs">桌号: A01</div>}
-          {t?.show_dine_type && <div className="text-xs bg-black text-white inline-block px-2 py-0.5 mt-1 rounded">{dineType}</div>}
+          <div className="text-lg font-bold">{t?.name || "厨房单"}</div>
+          <div className="text-sm">ORDER: {orderNo}</div>
+          <div className="text-xs">桌号: A01</div>
+          <div className="text-xs bg-black text-white inline-block px-2 py-0.5 mt-1 rounded">{dineType}</div>
         </div>
-        
         <div className="space-y-1">
           {items.map((item: any[], idx: number) => (
             <div key={idx} className="flex justify-between items-start">
               <span className="flex-1">
-                {t?.show_item_qty && <span className="font-bold">{item[1]}x </span>}
-                {t?.show_item_name && item[0]}
-                {t?.show_item_spec && item[2] && <span className="text-orange-600 text-xs"> ({item[2]})</span>}
+                <span className="font-bold">{item[1]}x </span>
+                {item[0]}
+                {item[2] && <span className="text-orange-600 text-xs"> ({item[2]})</span>}
               </span>
-              {t?.show_item_price && <span className="text-right">¥{((item[1] || 1) * 38).toFixed(0)}</span>}
             </div>
           ))}
         </div>
-        
-        {ticketNote && t?.show_item_note && (
+        {ticketNote && (
           <div className="mt-2 pt-2 border-t border-dashed border-gray-400 text-orange-600 text-xs">
             备注: {ticketNote}
           </div>
         )}
-        
-        {t?.show_total_amount && (
-          <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-right font-bold">
-            合计: ¥{items.reduce((sum: number, item: any[]) => sum + ((item[1] || 1) * 38), 0).toFixed(0)}
-          </div>
-        )}
-        
         <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-center text-xs text-gray-500">
           <div>{new Date().toLocaleString()}</div>
         </div>
@@ -120,27 +539,24 @@ export function PrintPage() {
     );
   };
 
-  const renderLabelMockup = () => {
-    const t = selectedTicketType;
-    return (
-      <div className="thermal-paper font-mono text-xs leading-tight" style={{ width: "180px" }}>
-        <div className="text-center border-b-2 border-gray-800 pb-2 mb-2">
-          <div className="text-lg font-bold">{materialName}</div>
-        </div>
-        <div className="space-y-2">
-          {t?.show_lot_no && <div className="flex justify-between"><span className="text-gray-600">批次:</span><span className="font-bold">{lotNo}</span></div>}
-          {t?.show_qty_info && (
-            <div className="flex justify-between text-lg">
-              <span className="font-bold">{quantity}</span><span className="font-bold">{unit}</span>
-            </div>
-          )}
-          {t?.show_expiry_date && expiryDate && <div className="flex justify-between"><span className="text-gray-600">效期:</span><span className="text-red-600 font-bold">{expiryDate}</span></div>}
-          {t?.show_supplier && supplierName && <div className="text-xs text-gray-600 mt-1 pt-1 border-t border-dashed">{supplierName}</div>}
-        </div>
-        <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-center"><div className="text-xs text-gray-400">▮▮▮▮▮▮▮▮▮▮</div></div>
+  const renderLabelMockup = () => (
+    <div className="thermal-paper font-mono text-xs leading-tight" style={{ width: "180px" }}>
+      <div className="text-center border-b-2 border-gray-800 pb-2 mb-2">
+        <div className="text-lg font-bold">{materialName}</div>
       </div>
-    );
-  };
+      <div className="space-y-2">
+        <div className="flex justify-between"><span className="text-gray-600">批次:</span><span className="font-bold">{lotNo}</span></div>
+        <div className="flex justify-between text-lg">
+          <span className="font-bold">{quantity}</span><span className="font-bold">{unit}</span>
+        </div>
+        {expiryDate && <div className="flex justify-between"><span className="text-gray-600">效期:</span><span className="text-red-600 font-bold">{expiryDate}</span></div>}
+        {supplierName && <div className="text-xs text-gray-600 mt-1 pt-1 border-t border-dashed">{supplierName}</div>}
+      </div>
+      <div className="mt-4 pt-2 border-t border-dashed border-gray-400 text-center">
+        <div className="text-xs text-gray-400">▮▮▮▮▮▮▮▮▮▮</div>
+      </div>
+    </div>
+  );
 
   const renderRawMockup = () => {
     const lines = rawContent.split("\\n").map(l => l.trim()).filter(Boolean);
@@ -152,10 +568,10 @@ export function PrintPage() {
   };
 
   const renderMockup = () => {
-    if (!selectedTicketType) return null;
-    const code = selectedTicketType.code;
-    if (code === "label") return renderLabelMockup();
-    if (code === "raw") return renderRawMockup();
+    if (!selectedTemplate) return null;
+    const t = selectedTemplate.template_type;
+    if (t === "batch_label") return renderLabelMockup();
+    if (t === "cup_label") return renderRawMockup();
     return renderTicketMockup();
   };
 
@@ -163,13 +579,12 @@ export function PrintPage() {
     setLoading(true);
     try {
       let res: DebugPrintResult;
-      const code = selectedTicketType?.code || "kitchen";
-      
-      if (code === "label") {
+      const templateType = selectedTemplate?.template_type || "kitchen_ticket";
+      if (templateType === "batch_label") {
         res = await invoke<DebugPrintResult>("debug_print_batch_label", {
           req: { lot_no: lotNo, material_name: materialName, quantity: parseFloat(quantity), unit, expiry_date: expiryDate || null, supplier_name: supplierName || null, filename: filename || null },
         });
-      } else if (code === "raw") {
+      } else if (templateType === "cup_label") {
         res = await invoke<DebugPrintResult>("debug_print_escpos", {
           content: rawContent.replace(/\\n/g, "\n"),
           filename: filename || null,
@@ -180,7 +595,6 @@ export function PrintPage() {
           req: { order_no: orderNo, dine_type: dineType, items, note: ticketNote || null, filename: filename || null },
         });
       }
-      
       setResult(res);
       toast.success(`已生成 (${res.byte_count} 字节)`);
     } catch (e: any) {
@@ -197,43 +611,47 @@ export function PrintPage() {
     }
   };
 
+  const safePreviewHtml = result ? DOMPurify.sanitize(result.html_preview) : "";
+
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">打印中心</h1>
-          <p className="text-muted-foreground mt-1">模板、票据类型、打印预览一体化管理</p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">打印中心</h1>
+        <p className="text-muted-foreground mt-1">打印机管理、模板设计与打印预览</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
         <TabsList>
-          <TabsTrigger value="preview">预览与打印</TabsTrigger>
-          <TabsTrigger value="ticket-types">票据类型</TabsTrigger>
+          <TabsTrigger value="printers">打印机</TabsTrigger>
+          <TabsTrigger value="preview">预览与测试</TabsTrigger>
           <TabsTrigger value="templates">模板管理</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="printers">
+          <PrintersSection />
+        </TabsContent>
 
         <TabsContent value="preview">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>参数输入</CardTitle>
-                <CardDescription>选择票据类型并输入打印参数</CardDescription>
+                <CardDescription>选择打印模板并输入打印参数</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex gap-2">
-                  <Select value={String(selectedTicketTypeId)} onValueChange={(v) => setSelectedTicketTypeId(Number(v))}>
-                    <SelectTrigger className="flex-1"><SelectValue placeholder="选择票据类型" /></SelectTrigger>
+                  <Select value={String(selectedTemplateId)} onValueChange={(v) => setSelectedTemplateId(Number(v))}>
+                    <SelectTrigger className="flex-1"><SelectValue placeholder="选择打印模板" /></SelectTrigger>
                     <SelectContent>
-                      {ticketTypes.map(t => (
+                      {templates.map(t => (
                         <SelectItem key={t.id} value={String(t.id)}>{t.name} {t.is_default && "(默认)"}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="icon" onClick={() => { setEditingTicketType(null); setEditDialogOpen(true); }}><Settings className="h-4 w-4" /></Button>
+                  <Button variant="outline" size="icon" onClick={() => setActiveTab("templates")}><ExternalLink className="h-4 w-4" /></Button>
                 </div>
 
-                {selectedTicketType?.code === "label" ? (
+                {selectedTemplate?.template_type === "batch_label" ? (
                   <>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2"><Label>批次号</Label><Input value={lotNo} onChange={e => setLotNo(e.target.value)} /></div>
@@ -248,7 +666,7 @@ export function PrintPage() {
                       <div className="space-y-2"><Label>供应商</Label><Input value={supplierName} onChange={e => setSupplierName(e.target.value)} placeholder="可选" /></div>
                     </div>
                   </>
-                ) : selectedTicketType?.code === "raw" ? (
+                ) : selectedTemplate?.template_type === "cup_label" ? (
                   <div className="space-y-2">
                     <Label>打印内容</Label>
                     <Textarea value={rawContent} onChange={e => setRawContent(e.target.value)} rows={6} className="font-mono text-sm" />
@@ -278,10 +696,10 @@ export function PrintPage() {
                     <div className="space-y-2"><Label>订单备注</Label><Input value={ticketNote} onChange={e => setTicketNote(e.target.value)} placeholder="可选" /></div>
                   </>
                 )}
-                
+
                 <div className="space-y-2"><Label>文件名 (可选)</Label><Input value={filename} onChange={e => setFilename(e.target.value)} placeholder="debug" /></div>
-                
-                <Button onClick={handlePrint} disabled={loading || !selectedTicketType} className="w-full">
+
+                <Button onClick={handlePrint} disabled={loading || !selectedTemplate} className="w-full">
                   <Printer className="h-4 w-4 mr-2" />{loading ? "生成中..." : "生成打印"}
                 </Button>
               </CardContent>
@@ -293,7 +711,7 @@ export function PrintPage() {
                 <CardDescription>热敏纸效果</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center bg-gray-100 p-4 rounded-lg min-h-[300px]">
-                {selectedTicketType ? renderMockup() : <div className="text-muted-foreground">请选择票据类型</div>}
+                {selectedTemplate ? renderMockup() : <div className="text-muted-foreground">请选择打印模板</div>}
               </CardContent>
             </Card>
           </div>
@@ -307,83 +725,16 @@ export function PrintPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div dangerouslySetInnerHTML={{ __html: result.html_preview }} />
+                <div dangerouslySetInnerHTML={{ __html: safePreviewHtml }} />
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
-        <TabsContent value="ticket-types">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>票据类型</CardTitle>
-                <CardDescription>管理票据类型配置</CardDescription>
-              </div>
-              <Button size="sm" onClick={() => { setEditingTicketType(null); setEditDialogOpen(true); }}>
-                <Plus className="h-4 w-4 mr-2" />新建类型
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {ticketTypes.map(t => (
-                  <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <div className="font-medium">{t.name} {t.is_default && <span className="text-xs bg-primary/10 px-2 py-0.5 rounded">(默认)</span>}</div>
-                      <div className="text-sm text-muted-foreground">{t.paper_width} | {t.code}</div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => { setEditingTicketType(t); setEditDialogOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-<TabsContent value="templates">
-          <Card>
-            <CardHeader>
-              <CardTitle>打印模板管理</CardTitle>
-              <CardDescription>管理厨房单、批次标签等打印模板，支持实时预览</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate("/print-templates")}>
-                  <FileText className="h-6 w-6" />
-                  <div>
-                    <div className="font-medium">厨房单模板</div>
-                    <div className="text-xs text-muted-foreground">管理厨房打印模板</div>
-                  </div>
-                </Button>
-                <Button variant="outline" className="h-auto py-4 flex-col gap-2" onClick={() => navigate("/print-templates")}>
-                  <Tag className="h-6 w-6" />
-                  <div>
-                    <div className="font-medium">批次标签模板</div>
-                    <div className="text-xs text-muted-foreground">管理标签打印模板</div>
-                  </div>
-                </Button>
-              </div>
-              <Button onClick={() => navigate("/print-templates")} className="w-full">
-                <Plus className="h-4 w-4 mr-2" />打开模板管理
-              </Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="templates">
+          <PrintTemplatesPage />
         </TabsContent>
       </Tabs>
-
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingTicketType ? "编辑票据类型" : "新建票据类型"}</DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>取消</Button>
-            <Button onClick={() => setEditDialogOpen(false)}>保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -42,6 +42,38 @@ pub struct DebugPrintResult {
     pub byte_count: usize,
 }
 
+fn debug_output_dir() -> Result<PathBuf, String> {
+    let base = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Cuckoo")
+        .join("debug_prints");
+    std::fs::create_dir_all(&base).map_err(|e| format!("創建調試目錄失敗: {}", e))?;
+    Ok(base)
+}
+
+fn sanitize_filename(input: Option<&str>, default_stem: &str, ext: &str) -> String {
+    let raw = input.unwrap_or(default_stem).trim();
+    let stem = if raw.is_empty() { default_stem } else { raw };
+    let filtered: String = stem
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .collect();
+    let safe = if filtered.is_empty() {
+        default_stem.to_string()
+    } else {
+        filtered
+    };
+    format!("{}.{}", safe, ext)
+}
+
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
 // ==================== 飛鵝雲 API ====================
 
 const FEIE_API_URL: &str = "http://api.feieyun.cn/Api/Open/";
@@ -407,45 +439,12 @@ pub fn lan_print_tspl(ip: &str, port: i32, builder: &TsplBuilder) -> Result<(), 
     lan_print(ip, port, &data)
 }
 
-// ==================== 局域網掃描 ====================
+// ==================== 局域网扫描 ====================
 
 pub fn scan_lan_printers(subnet: &str, timeout_ms: u64) -> Vec<LanPrinter> {
     let mut found = Vec::new();
 
     for i in 1..=254 {
-        let ip = format!("{}.{}", subnet, i);
-        let addr = format!("{}:9100", ip);
-
-        if let Ok(addr) = addr.parse::<std::net::SocketAddr>() {
-            if TcpStream::connect_timeout(&addr, Duration::from_millis(timeout_ms)).is_ok() {
-                found.push(LanPrinter {
-                    ip: ip.clone(),
-                    port: 9100,
-                    sn: None,
-                });
-            }
-        }
-    }
-
-    found
-}
-
-#[allow(dead_code)]
-pub fn scan_lan_printers_range(start_ip: &str, end_ip: &str, timeout_ms: u64) -> Vec<LanPrinter> {
-    let mut found = Vec::new();
-
-    let start_parts: Vec<u32> = start_ip.split('.').filter_map(|s| s.parse().ok()).collect();
-    let end_parts: Vec<u32> = end_ip.split('.').filter_map(|s| s.parse().ok()).collect();
-
-    if start_parts.len() != 4 || end_parts.len() != 4 {
-        return found;
-    }
-
-    let start_last = start_parts[3];
-    let end_last = end_parts[3];
-    let subnet = format!("{}.{}.{}", start_parts[0], start_parts[1], start_parts[2]);
-
-    for i in start_last..=end_last {
         let ip = format!("{}.{}", subnet, i);
         let addr = format!("{}:9100", ip);
 
@@ -829,9 +828,9 @@ pub fn save_escpos_to_file(builder: EscPosBuilder, filename: Option<&str>) -> Re
     let data = builder.build();
     let byte_count = data.len();
 
-    let file_name = filename.unwrap_or("debug_print");
-    let file_path = format!("{}.bin", file_name);
-    let path = PathBuf::from(&file_path);
+    let output_dir = debug_output_dir()?;
+    let file_name = sanitize_filename(filename, "debug_print", "bin");
+    let path = output_dir.join(file_name);
 
     std::fs::write(&path, &data)
         .map_err(|e| format!("寫入文件失敗: {}", e))?;
@@ -870,9 +869,9 @@ pub fn save_batch_label_to_file(
     let data = builder.build().into_bytes();
     let byte_count = data.len();
 
-    let file_name = filename.unwrap_or("debug_label");
-    let file_path = format!("{}.txt", file_name);
-    let path = PathBuf::from(&file_path);
+    let output_dir = debug_output_dir()?;
+    let file_name = sanitize_filename(filename, "debug_label", "txt");
+    let path = output_dir.join(file_name);
 
     std::fs::write(&path, &data)
         .map_err(|e| format!("寫入文件失敗: {}", e))?;
@@ -894,13 +893,17 @@ pub fn save_batch_label_to_file(
             {}{}\
             <div style=\"margin-top: 10px; text-align: center; font-family: monospace; font-size: 10px; letter-spacing: 2px;\">||||| {} |||||</div>\
         </div>",
-        material_name,
-        lot_no,
+        escape_html(material_name),
+        escape_html(lot_no),
         quantity,
-        unit,
-        expiry_date.map(|d| format!("<div style=\"font-size: 12px; margin: 4px 0;\">到期: {}</div>", d)).unwrap_or_default(),
-        supplier_name.map(|s| format!("<div style=\"font-size: 12px; margin: 4px 0;\">供應商: {}</div>", s)).unwrap_or_default(),
-        lot_no,
+        escape_html(unit),
+        expiry_date
+            .map(|d| format!("<div style=\"font-size: 12px; margin: 4px 0;\">到期: {}</div>", escape_html(d)))
+            .unwrap_or_default(),
+        supplier_name
+            .map(|s| format!("<div style=\"font-size: 12px; margin: 4px 0;\">供應商: {}</div>", escape_html(s)))
+            .unwrap_or_default(),
+        escape_html(lot_no),
     );
 
     Ok(DebugPrintResult {

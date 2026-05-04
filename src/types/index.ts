@@ -19,6 +19,15 @@ export interface Recipe {
   recipe_type: string;
   output_qty: number;
 }
+export interface RecipeType {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  sort_no: number;
+  is_system: boolean;
+  is_active: boolean;
+}
 export interface RecipeItem {
   id: number;
   recipe_id: number;

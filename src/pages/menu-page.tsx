@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { parseSafeFloat } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 interface MenuCategory { id: number; name: string; }
 interface MenuItem { id: number; name: string; sales_price: number; is_available: boolean; recipe_id: number | null; category_id: number | null; }
@@ -23,6 +24,7 @@ interface MenuPageProps {
   menuCategories: MenuCategory[]; menuItems: MenuItem[]; recipes: Recipe[];
   onCreateMenuCategory: (name: string) => void;
   onCreateMenuItem: (data: { name: string; price: number; category_id: number | null; recipe_id: number | null }) => void;
+  onCreatePendingRecipeForMenu: (menuItemId: number, menuItemName: string) => Promise<number | null>;
   onToggleAvailability: (id: number, is_available: boolean) => void;
   onBatchToggleAvailability?: (ids: number[], is_available: boolean) => void;
   onUpdateMenuItem: (id: number, data: { name?: string; category_id?: number | null; recipe_id?: number | null; sales_price?: number }) => void;
@@ -38,12 +40,13 @@ interface MenuPageProps {
 
 export function MenuPage({
   menuCategories, menuItems, recipes,
-  onCreateMenuCategory, onCreateMenuItem, onToggleAvailability,
+  onCreateMenuCategory, onCreateMenuItem, onCreatePendingRecipeForMenu, onToggleAvailability,
   onBatchToggleAvailability,
   onUpdateMenuItem, onDeleteMenuItem, onUpdateMenuCategory, onDeleteMenuCategory,
   onGetSpecs, onCreateSpec, onUpdateSpec, onDeleteSpec,
   searchQuery,
 }: MenuPageProps) {
+  const navigate = useNavigate();
   const filteredMenuItems = menuItems.filter((item) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -183,6 +186,18 @@ export function MenuPage({
     if (specMenuItem) onGetSpecs(specMenuItem.id).then(setSpecList);
   }
 
+  async function handleCompleteRecipe(item: MenuItem) {
+    if (item.recipe_id) {
+      navigate("/recipes", { state: { recipeId: item.recipe_id } });
+      return;
+    }
+
+    const recipeId = await onCreatePendingRecipeForMenu(item.id, item.name);
+    if (recipeId) {
+      navigate("/recipes", { state: { guideRecipeId: recipeId } });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -227,6 +242,9 @@ export function MenuPage({
                       <TableCell><Badge variant={item.is_available ? "default" : "secondary"}>{item.is_available ? "可售" : "停售"}</Badge></TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          <Button variant="outline" size="sm" onClick={() => handleCompleteRecipe(item)}>
+                            {item.recipe_id ? "查看配方" : "补配方"}
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onToggleAvailability(item.id, !item.is_available)}>{item.is_available ? <ToggleRight className="h-4 w-4 text-emerald-500" /> : <ToggleLeft className="h-4 w-4 text-muted-foreground" />}</Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openSpecDialog(item)}><Tag className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditItem(item)}><Pencil className="h-4 w-4" /></Button>

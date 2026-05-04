@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Package, Pencil, Trash2, Save, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { invoke } from "@tauri-apps/api/core";
+import { useNavigate } from "react-router-dom";
 
 interface Unit { id: number; code: string; name: string; }
 interface MaterialCategory { id: number; code: string; name: string; }
@@ -18,9 +20,12 @@ interface Material {
   id: number; code: string; name: string; category_id: number | null;
   base_unit_id: number; tags: Tag[]; category?: MaterialCategory; base_unit?: Unit;
 }
+interface Recipe { id: number; code: string; name: string; recipe_type: string; output_qty: number; }
+interface RecipeItem { id: number; recipe_id: number; item_type: string; ref_id: number; qty: number; unit_id: number; wastage_rate: number; note: string | null; sort_no: number; }
+interface RecipeWithItems { recipe: Recipe; items: RecipeItem[]; }
 
 interface MaterialsPageProps {
-  materials: Material[]; categories: MaterialCategory[]; tags: Tag[]; units: Unit[];
+  materials: Material[]; recipes: Recipe[]; categories: MaterialCategory[]; tags: Tag[]; units: Unit[];
   onCreateMaterial: (data: { code: string; name: string; base_unit_id: number; category_id: number | null; tag_ids: number[] }) => void;
   onUpdateMaterial: (id: number, data: { name?: string; category_id?: number | null }) => void;
   onDeleteMaterial: (id: number) => void;
@@ -33,11 +38,12 @@ interface MaterialsPageProps {
 }
 
 export function MaterialsPage({
-  materials, categories, tags, units,
+  materials, recipes, categories, tags, units,
   onCreateMaterial, onUpdateMaterial, onDeleteMaterial, onRemoveMaterialTag,
   onCreateCategory, onDeleteCategory, onCreateTag, onDeleteTag,
   searchQuery,
 }: MaterialsPageProps) {
+  const navigate = useNavigate();
   const filteredMaterials = materials.filter((m) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -61,6 +67,45 @@ export function MaterialsPage({
   const [newTagName, setNewTagName] = useState("");
   const [newTagCode, setNewTagCode] = useState("");
   const [newTagColor, setNewTagColor] = useState("#3B82F6");
+  const [materialRecipeMap, setMaterialRecipeMap] = useState<Record<number, Recipe[]>>({});
+  const [usageMaterial, setUsageMaterial] = useState<Material | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMaterialUsage() {
+      try {
+        const recipeDetails = await Promise.all(
+          recipes.map((recipe) => invoke<RecipeWithItems>("get_recipe_with_items", { recipeId: recipe.id })),
+        );
+        const nextMap: Record<number, Recipe[]> = {};
+        for (const detail of recipeDetails) {
+          for (const item of detail.items) {
+            if (item.item_type !== "material") continue;
+            if (!nextMap[item.ref_id]) nextMap[item.ref_id] = [];
+            nextMap[item.ref_id].push(detail.recipe);
+          }
+        }
+        if (!cancelled) {
+          setMaterialRecipeMap(nextMap);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error("加载材料配方引用失败", e);
+        }
+      }
+    }
+
+    if (recipes.length > 0) {
+      loadMaterialUsage();
+    } else {
+      setMaterialRecipeMap({});
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recipes]);
 
   function openEditMaterial(m: Material) {
     setEditMaterial(m);
@@ -91,6 +136,14 @@ export function MaterialsPage({
     setNewMaterialCode(""); setNewMaterialName(""); setNewMaterialUnit("1"); setNewMaterialCategory(""); setNewMaterialTags([]);
   }
 
+  function openRecipeUsage(material: Material) {
+    setUsageMaterial(material);
+  }
+
+  function goToRecipe(recipeId: number) {
+    navigate("/recipes", { state: { recipeId } });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -117,6 +170,7 @@ export function MaterialsPage({
                     <TableHead>名称</TableHead>
                     <TableHead>分类</TableHead>
                     <TableHead>单位</TableHead>
+                    <TableHead>引用配方</TableHead>
                     <TableHead>标签</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
@@ -128,6 +182,15 @@ export function MaterialsPage({
                       <TableCell className="font-medium">{m.name}</TableCell>
                       <TableCell className="text-muted-foreground">{m.category?.name || "-"}</TableCell>
                       <TableCell className="text-muted-foreground">{m.base_unit?.name || "-"}</TableCell>
+                      <TableCell>
+                        {(materialRecipeMap[m.id]?.length || 0) > 0 ? (
+                          <Button variant="outline" size="sm" onClick={() => openRecipeUsage(m)}>
+                            查看 {materialRecipeMap[m.id].length} 个配方
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">未被配方使用</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
                           {m.tags.map((tag) => (
@@ -262,6 +325,32 @@ export function MaterialsPage({
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditMaterial(null)}>取消</Button>
             <Button onClick={saveEditMaterial}><Save className="mr-1 h-4 w-4" />保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!usageMaterial} onOpenChange={() => setUsageMaterial(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>配方引用 - {usageMaterial?.name}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-4">
+            {(usageMaterial && materialRecipeMap[usageMaterial.id]?.length) ? (
+              materialRecipeMap[usageMaterial.id].map((recipe) => (
+                <div key={recipe.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <p className="font-medium">{recipe.name}</p>
+                    <p className="text-xs text-muted-foreground">{recipe.code}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => goToRecipe(recipe.id)}>
+                    查看配方
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <EmptyState icon={Package} title="暂无引用" description="这个材料还没有被任何配方使用" />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setUsageMaterial(null)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

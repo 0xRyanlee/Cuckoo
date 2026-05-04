@@ -85,6 +85,7 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
       setTemplates(result);
     } catch (e) {
       console.error("载入模板失败:", e);
+      toast.error("载入模板失败", { description: String(e) });
     }
   }
 
@@ -134,6 +135,15 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
     setLivePreviewHtml("");
     setLivePreviewError("");
     setEditDialogOpen(true);
+    // 開啟時立即觸發預覽，不等用戶修改
+    updateLivePreview(
+      tpl.content,
+      tpl.paper_size,
+      tpl.theme || "classic",
+      tpl.restaurant_name || "",
+      tpl.tagline || "",
+      tpl.logo_data || "",
+    );
   }
 
   async function saveTemplate() {
@@ -471,12 +481,12 @@ export function PrintTemplatesPage(_props: PrintTemplatesPageProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Printer className="h-4 w-4" />打印预览</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <div className="border rounded-lg p-4 bg-white text-black font-mono text-sm" dangerouslySetInnerHTML={{ __html: previewHtml }} />
-            <Separator className="my-4" />
+          <div className="max-h-[65vh] overflow-y-auto space-y-4 pr-1">
+            <div className="border rounded-lg p-4 bg-white text-black font-mono text-sm" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }} />
+            <Separator />
             <div>
-              <h4 className="text-sm font-medium mb-2">原始文本</h4>
-              <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
+              <h4 className="text-sm font-medium mb-2 text-muted-foreground">原始文本</h4>
+              <pre className="text-xs bg-muted p-3 rounded overflow-x-auto whitespace-pre-wrap break-all">
                 {previewLines.join("\n")}
               </pre>
             </div>
