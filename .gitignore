@@ -57,3 +57,24 @@ src-tauri/icons/logo-option-*.svg
 *.tmp
 *.temp
 .cache/
+
+# --- Internal / AI-generated dev docs (not for public repo) ---
+TODOs.md
+docs/archived/
+docs/DOCS_INDEX.md
+docs/progress/
+docs/comprehensive-audit-report-*.md
+docs/implementation-audit-report-*.md
+docs/info-flow-audit-*.md
+docs/recipe-management-audit-*.md
+docs/recipe-multi-role-roadmap-*.md
+docs/recipe-ux-design-options.md
+docs/system-audit-report-*.md
+docs/ui-ux-audit-report*.md
+docs/workflow-audit-report-*.md
+docs/backlog-and-fix-list.md
+docs/test-plan-*.md
+docs/test-report-*.md
+
+# --- Certs (local signing, never commit) ---
+certs/

@@ -11,14 +11,11 @@
 Cuckoo/
 ├── README.md                      # 项目简介与快速开始
 ├── ROADMAP.md                     # 版本路线图（v1.3 ~ v3.0）
-├── TODOs.md                       # 开发任务清单 (P0-P2)
-├── PAGE_PLAN.md                   # 页面结构规划
-├── RELEASE_NOTES_v1.2.2.md       # 发布说明
-├── RELEASE_INSTALL_GUIDE.md      # 安装指南
 │
 ├── docs/
 │   ├── 📖 用户文档
-│   │   └── user-guide.md          # 用户操作手册（面向店铺使用者）
+│   │   ├── user-guide.md          # 用户操作手册（面向店铺使用者）
+│   │   └── install-guide.md       # 安装指南
 │   │
 │   ├── 📋 开发者文档
 │   │   ├── DOCS_INDEX.md          # 本文档 — 文档总索引
@@ -59,7 +56,7 @@ Cuckoo/
 
 | 需求 | 文档 |
 |------|------|
-| 如何安装 | [RELEASE_INSTALL_GUIDE.md](../RELEASE_INSTALL_GUIDE.md) |
+| 如何安装 | [install-guide.md](install-guide.md) |
 | 如何使用 | [user-guide.md](user-guide.md) |
 | 遇到问题 | [remote-assistance-guide.md](remote-assistance-guide.md) |
 
