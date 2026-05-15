@@ -1672,14 +1672,14 @@ pub fn debug_print_escpos(content: String, filename: Option<String>) -> Result<D
 // ── 自動更新 ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+pub fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
 }
 
 #[tauri::command]
-pub async fn check_for_update() -> Result<Option<crate::updater_check::UpdateInfo>, String> {
-    let version = env!("CARGO_PKG_VERSION");
-    crate::updater_check::fetch_update(version).await
+pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<crate::updater_check::UpdateInfo>, String> {
+    let version = app.package_info().version.to_string();
+    crate::updater_check::fetch_update(&version).await
 }
 
 #[tauri::command]
