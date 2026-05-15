@@ -47,6 +47,6 @@ jobs:
           tagName: v__VERSION__
           releaseName: "Cuckoo v__VERSION__"
           releaseBody: "See the assets below for the installation files."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
