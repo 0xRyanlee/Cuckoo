@@ -1668,3 +1668,24 @@ pub fn debug_print_escpos(content: String, filename: Option<String>) -> Result<D
     builder.text_ln(&content);
     crate::printer::save_escpos_to_file(builder, filename.as_deref())
 }
+
+// ── 自動更新 ──────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+pub async fn check_for_update() -> Result<Option<crate::updater_check::UpdateInfo>, String> {
+    let version = env!("CARGO_PKG_VERSION");
+    crate::updater_check::fetch_update(version).await
+}
+
+#[tauri::command]
+pub fn download_and_open_update(url: String, app: tauri::AppHandle) -> Result<(), String> {
+    std::thread::spawn(move || {
+        crate::updater_check::download_and_open(&url, app);
+    });
+    Ok(())
+}

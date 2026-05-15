@@ -5,9 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Settings, Database, Wifi, WifiOff, Monitor, Copy, Bug, RefreshCw, Trash2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Settings, Database, Wifi, WifiOff, Monitor, Copy, Bug, RefreshCw, Trash2,
+         ArrowUpCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { appLogger, type LogEntry, type ErrorCategory } from "@/lib/logger";
+import { UpdateDialog } from "@/components/UpdateDialog";
+import type { UpdateInfo } from "@/components/UpdateDialog";
+
+const AUTO_UPDATE_KEY = "cuckoo_auto_update";
+const SKIP_KEY = "cuckoo_skipped_version";
 
 interface SettingsPageProps {
   connected: boolean;
@@ -198,12 +206,47 @@ function ErrorLogPanel() {
 
 export function SettingsPage({ connected }: SettingsPageProps) {
   const [dbStatus, setDbStatus] = useState<string>("檢查中...");
+  const [appVersion, setAppVersion] = useState<string>("...");
+  const [autoUpdate, setAutoUpdate] = useState(
+    localStorage.getItem(AUTO_UPDATE_KEY) !== "false"
+  );
+  const [checking, setChecking] = useState(false);
+  const [manualUpdateInfo, setManualUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [latestChecked, setLatestChecked] = useState(false);
 
   useEffect(() => {
     invoke<string>("health_check")
       .then((r) => setDbStatus(r === "ok" ? "正常" : "異常"))
       .catch(() => setDbStatus("連線失敗"));
+    invoke<string>("get_app_version")
+      .then(setAppVersion)
+      .catch(() => {});
   }, []);
+
+  function handleAutoUpdateToggle(val: boolean) {
+    setAutoUpdate(val);
+    localStorage.setItem(AUTO_UPDATE_KEY, val ? "true" : "false");
+    if (val) localStorage.removeItem(SKIP_KEY);
+  }
+
+  async function handleCheckNow() {
+    setChecking(true);
+    setLatestChecked(false);
+    setManualUpdateInfo(null);
+    try {
+      const info = await invoke<UpdateInfo | null>("check_for_update");
+      if (info) {
+        setManualUpdateInfo(info);
+      } else {
+        setLatestChecked(true);
+        toast.success("已是最新版本");
+      }
+    } catch (e) {
+      toast.error("检查失败", { description: String(e) });
+    } finally {
+      setChecking(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -229,7 +272,7 @@ export function SettingsPage({ connected }: SettingsPageProps) {
                 <p className="text-xs text-muted-foreground">当前安装的版本</p>
               </div>
             </div>
-            <span className="text-sm font-mono text-muted-foreground">v1.2.4</span>
+            <span className="text-sm font-mono text-muted-foreground">v{appVersion}</span>
           </div>
           <Separator />
           <div className="flex items-center justify-between py-3">
@@ -263,6 +306,57 @@ export function SettingsPage({ connected }: SettingsPageProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Auto-update settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ArrowUpCircle className="h-4 w-4" />
+            自动更新
+          </CardTitle>
+          <CardDescription>应用启动后自动检查 GitHub 是否有新版本</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="auto-update-switch" className="flex flex-col gap-0.5 cursor-pointer">
+              <span className="text-sm font-medium">启动时自动检查更新</span>
+              <span className="text-xs text-muted-foreground">有新版本时会弹窗提示，可选择立即更新或跳过</span>
+            </Label>
+            <Switch
+              id="auto-update-switch"
+              checked={autoUpdate}
+              onCheckedChange={handleAutoUpdateToggle}
+            />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">立即检查</p>
+              <p className="text-xs text-muted-foreground">手动检查是否有可用更新</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {latestChecked && (
+                <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <CheckCircle2 className="h-3 w-3" />已是最新版
+                </span>
+              )}
+              <Button variant="outline" size="sm" onClick={handleCheckNow} disabled={checking}>
+                {checking
+                  ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" />检查中...</>
+                  : <><RefreshCw className="mr-2 h-3 w-3" />检查更新</>
+                }
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {manualUpdateInfo && (
+        <UpdateDialog
+          info={manualUpdateInfo}
+          onDismiss={() => setManualUpdateInfo(null)}
+        />
+      )}
 
       {/* Error Log Panel */}
       <Card>

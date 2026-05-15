@@ -1,6 +1,7 @@
 mod database;
 mod commands;
 mod printer;
+mod updater_check;
 
 use commands::AppState;
 use database::Database;
@@ -189,6 +190,9 @@ pub fn run() {
             commands::test_feie_printer,
             commands::test_lan_printer,
             commands::bind_feie_printer,
+            commands::get_app_version,
+            commands::check_for_update,
+            commands::download_and_open_update,
             commands::send_print_task,
             commands::print_kitchen_ticket,
             commands::print_batch_label,

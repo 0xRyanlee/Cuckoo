@@ -33,6 +33,8 @@ import { useAppData } from "@/hooks/useAppData";
 import { useAppActions } from "@/hooks/useAppActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { OrderWithItems, OrderItemModifier } from "./types";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
+import { UpdateDialog } from "@/components/UpdateDialog";
 
 // ==================== App ====================
 
@@ -44,6 +46,7 @@ function App() {
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void } | null>(null);
   const [appStartTime] = useState(Date.now());
   const [unseenErrorCount, setUnseenErrorCount] = useState(0);
+  const { updateInfo, dismiss: dismissUpdate } = useAutoUpdate();
 
   // Increment badge whenever the logger writes a new entry
   useEffect(() => {
@@ -312,6 +315,7 @@ function App() {
         description={confirmAction?.description || ""}
         onConfirm={() => confirmAction?.onConfirm()}
       />
+      {updateInfo && <UpdateDialog info={updateInfo} onDismiss={dismissUpdate} />}
     </TooltipProvider>
   );
 }
