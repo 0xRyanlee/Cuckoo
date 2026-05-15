@@ -188,6 +188,7 @@ pub fn run() {
             commands::scan_lan_printers,
             commands::test_feie_printer,
             commands::test_lan_printer,
+            commands::bind_feie_printer,
             commands::send_print_task,
             commands::print_kitchen_ticket,
             commands::print_batch_label,
