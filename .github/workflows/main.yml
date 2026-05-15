@@ -1,14 +1,15 @@
-name: "Release"
+name: "CI"
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  publish:
-    permissions:
-      contents: write
+  check:
     strategy:
       fail-fast: false
       matrix:
@@ -26,7 +27,6 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Those targets are only used on macos runners so it's skip on windows and linux ones.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: install dependencies (ubuntu only)
@@ -38,13 +38,8 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: v__VERSION__ # tauri-action replaces this with the app version
-          releaseName: "Cuckoo v__VERSION__"
-          releaseBody: "See the assets below for the installation files."
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
+      - name: frontend type check
+        run: npx tsc --noEmit
+
+      - name: cargo check
+        run: cargo check --manifest-path src-tauri/Cargo.toml
