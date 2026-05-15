@@ -1,5 +1,5 @@
 export interface Unit { id: number; code: string; name: string; }
-export interface MaterialCategory { id: number; code: string; name: string; }
+export interface MaterialCategory { id: number; code: string; name: string; sort_no: number; is_active: boolean; }
 export interface TagItem { id: number; code: string; name: string; color?: string; }
 export interface Material {
   id: number;
@@ -7,10 +7,14 @@ export interface Material {
   name: string;
   category_id: number | null;
   base_unit_id: number;
+  shelf_life_days: number | null;
+  min_qty: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
   tags: TagItem[];
   category?: MaterialCategory;
   base_unit?: Unit;
-  min_qty?: number;
 }
 export interface Recipe {
   id: number;
@@ -183,6 +187,24 @@ export interface Supplier {
   contact_person: string | null;
   address: string | null;
   note: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+export interface Expense {
+  id: number;
+  expense_type: string;
+  amount: number;
+  expense_date: string;
+  note: string | null;
+  operator: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+export interface SupplierProduct {
+  id: number;
+  product_name: string;
+  supplier_name: string;
+  channel: string;
 }
 export interface MaterialState {
   id: number;

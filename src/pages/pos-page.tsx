@@ -18,6 +18,10 @@ function formatPrice(price: number): string {
   return price.toLocaleString("zh-CN", { style: "currency", currency: "CNY" });
 }
 
+function formatPriceMini(price: number): string {
+  return `¥${price.toFixed(0)}`;
+}
+
 interface MenuCategory {
   id: number;
   name: string;
@@ -79,6 +83,7 @@ export function POSPage({
 }: POSPageProps) {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [specDialogOpen, setSpecDialogOpen] = useState(false);
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [modifierDialogOpen, setModifierDialogOpen] = useState(false);
@@ -305,8 +310,8 @@ export function POSPage({
                             <Badge variant="destructive" className="text-xs">停售</Badge>
                           )}
                         </div>
-                        <span className="text-lg font-bold text-primary">
-                          {formatPrice(item.sales_price)}
+                        <span className="text-sm font-bold text-primary">
+                          {formatPriceMini(item.sales_price)}
                         </span>
                       </Button>
                     ))}
@@ -463,10 +468,20 @@ export function POSPage({
             />
           )}
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="h-12" onClick={async () => { const ok = await onCreateOrder(cart, dineType, tableNo || null); if (ok) clearCart(); }} disabled={cart.length === 0}>
+            <Button variant="outline" className="h-12" onClick={async () => {
+              if (isSubmitting) return;
+              setIsSubmitting(true);
+              try { const ok = await onCreateOrder(cart, dineType, tableNo || null); if (ok) clearCart(); }
+              finally { setIsSubmitting(false); }
+            }} disabled={cart.length === 0 || isSubmitting}>
               暂存
             </Button>
-            <Button className="h-12 text-base" size="lg" onClick={async () => { const ok = await onCreateAndSubmit(cart, dineType, tableNo || null); if (ok) clearCart(); }} disabled={cart.length === 0}>
+            <Button className="h-12 text-base" size="lg" onClick={async () => {
+              if (isSubmitting) return;
+              setIsSubmitting(true);
+              try { const ok = await onCreateAndSubmit(cart, dineType, tableNo || null); if (ok) clearCart(); }
+              finally { setIsSubmitting(false); }
+            }} disabled={cart.length === 0 || isSubmitting}>
               <Send className="mr-2 h-5 w-5" />
               提交
             </Button>

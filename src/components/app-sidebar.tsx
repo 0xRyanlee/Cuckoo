@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Package, ChefHat, Warehouse, FileText, ShoppingCart, Settings, Home, User, LogOut, CreditCard, Truck, ClipboardList, Factory, FileBox, BarChart3, Printer, Monitor, Layers, SlidersHorizontal } from "lucide-react";
+import { MoreHorizontal, Package, ChefHat, Warehouse, FileText, ShoppingCart, Settings, Home, User, LogOut, CreditCard, Truck, ClipboardList, Factory, FileBox, BarChart3, Printer, Monitor, Layers, SlidersHorizontal, Receipt } from "lucide-react";
 
 const navGroups = [
   {
@@ -57,6 +57,7 @@ const navGroups = [
     label: "设置",
     items: [
       { id: "attributes", label: "属性模板", icon: SlidersHorizontal },
+      { id: "expenses", label: "日常支出", icon: Receipt },
       { id: "print", label: "打印中心", icon: Printer },
       { id: "settings", label: "系统设置", icon: Settings },
     ],

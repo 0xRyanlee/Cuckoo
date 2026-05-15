@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Building2, Phone, User, MapPin, Pencil, Trash2, Save, Truck } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Building2, Pencil, Trash2, Save, Truck, ShoppingBag, Globe, Store } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import type { SupplierProduct } from "@/types";
 
 interface Supplier {
   id: number;
@@ -20,25 +23,26 @@ interface Supplier {
 
 interface SuppliersPageProps {
   suppliers: Supplier[];
+  supplierProducts: SupplierProduct[];
   onCreateSupplier: (data: { name: string; phone: string; contact_person: string; address: string; note: string }) => void;
   onUpdateSupplier: (id: number, data: { name?: string; phone?: string | null; contact_person?: string | null; address?: string | null; note?: string | null }) => void;
   onDeleteSupplier: (id: number) => void;
+  onCreateSupplierProduct: (data: { product_name: string; supplier_name: string; channel: string }) => void;
+  onDeleteSupplierProduct: (id: number) => void;
   searchQuery?: string;
 }
 
 export function SuppliersPage({
   suppliers,
+  supplierProducts,
   onCreateSupplier,
   onUpdateSupplier,
   onDeleteSupplier,
+  onCreateSupplierProduct,
+  onDeleteSupplierProduct,
   searchQuery,
 }: SuppliersPageProps) {
-  const filteredSuppliers = suppliers.filter((s) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return s.name.toLowerCase().includes(q) || (s.contact_person || "").toLowerCase().includes(q) ||
-      (s.phone || "").toLowerCase().includes(q) || (s.address || "").toLowerCase().includes(q);
-  });
+  const [channelFilter, setChannelFilter] = useState<string>("all");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newContact, setNewContact] = useState("");
@@ -53,6 +57,27 @@ export function SuppliersPage({
   const [editNote, setEditNote] = useState("");
 
   const [deleteConfirm, setDeleteConfirm] = useState<Supplier | null>(null);
+  const [deleteProductConfirm, setDeleteProductConfirm] = useState<SupplierProduct | null>(null);
+
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductSupplier, setNewProductSupplier] = useState("");
+  const [newProductChannel, setNewProductChannel] = useState("local");
+
+  const filteredProducts = supplierProducts.filter((p) => {
+    const matchChannel = channelFilter === "all" || p.channel === channelFilter;
+    if (!searchQuery) return matchChannel;
+    const q = searchQuery.toLowerCase();
+    const matchSearch = p.product_name.toLowerCase().includes(q) || p.supplier_name.toLowerCase().includes(q);
+    return matchSearch && matchChannel;
+  });
+
+  const filteredSuppliers = suppliers.filter((s) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return s.name.toLowerCase().includes(q) || (s.contact_person || "").toLowerCase().includes(q) ||
+      (s.phone || "").toLowerCase().includes(q) || (s.address || "").toLowerCase().includes(q);
+  });
 
   function openEdit(s: Supplier) {
     setEditSupplier(s);
@@ -75,23 +100,104 @@ export function SuppliersPage({
     setEditSupplier(null);
   }
 
+  function handleAddProduct() {
+    if (!newProductName.trim() || !newProductSupplier.trim()) return;
+    onCreateSupplierProduct({ product_name: newProductName.trim(), supplier_name: newProductSupplier.trim(), channel: newProductChannel });
+    setNewProductName(""); setNewProductSupplier(""); setNewProductChannel("local");
+    setAddProductOpen(false);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">供應商管理</h2>
-          <p className="text-sm text-muted-foreground">管理供應商資訊與聯繫方式</p>
+          <h2 className="text-2xl font-semibold tracking-tight">采购渠道管理</h2>
+          <p className="text-sm text-muted-foreground">管理商品与采购渠道（本地 / 网络）</p>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4" />
+                商品列表
+              </CardTitle>
+              <CardDescription>共 {filteredProducts.length} 个商品</CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <Tabs value={channelFilter} onValueChange={setChannelFilter}>
+                <TabsList>
+                  <TabsTrigger value="all">全部</TabsTrigger>
+                  <TabsTrigger value="local">
+                    <Store className="mr-1 h-3 w-3" />
+                    本地
+                  </TabsTrigger>
+                  <TabsTrigger value="network">
+                    <Globe className="mr-1 h-3 w-3" />
+                    网络
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Button size="sm" onClick={() => setAddProductOpen(true)}>
+                <Plus className="mr-1 h-3 w-3" />新增商品
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredProducts.length === 0 ? (
+            <EmptyState icon={ShoppingBag} title="暂无商品" description="点击「新增商品」按钮添加" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>商品</TableHead>
+                  <TableHead>供应商</TableHead>
+                  <TableHead>采购渠道</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProducts.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.product_name}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.supplier_name}</TableCell>
+                    <TableCell>
+                      {p.channel === "local" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                          <Store className="h-3 w-3" />
+                          本地
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800">
+                          <Globe className="h-3 w-3" />
+                          网络
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteProductConfirm(p)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              供應商列表
+              供应商列表
             </CardTitle>
-            <CardDescription>共 {filteredSuppliers.length} 个供应商{filteredSuppliers.length !== suppliers.length ? `（筛选自 ${suppliers.length} 个）` : ""}</CardDescription>
+            <CardDescription>共 {filteredSuppliers.length} 个供应商</CardDescription>
           </CardHeader>
           <CardContent>
             {filteredSuppliers.length === 0 ? (
@@ -100,9 +206,9 @@ export function SuppliersPage({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>名稱</TableHead>
-                    <TableHead>聯繫人</TableHead>
-                    <TableHead>電話</TableHead>
+                    <TableHead>名称</TableHead>
+                    <TableHead>联系人</TableHead>
+                    <TableHead>电话</TableHead>
                     <TableHead>地址</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
@@ -111,36 +217,9 @@ export function SuppliersPage({
                   {filteredSuppliers.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell className="font-medium">{s.name}</TableCell>
-                      <TableCell>
-                        {s.contact_person ? (
-                          <div className="flex items-center gap-1.5">
-                            <User className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span>{s.contact_person}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {s.phone ? (
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="font-mono text-xs">{s.phone}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {s.address ? (
-                          <div className="flex items-center gap-1.5 max-w-[200px]">
-                            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="truncate text-xs">{s.address}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
+                      <TableCell className="text-muted-foreground">{s.contact_person || "-"}</TableCell>
+                      <TableCell className="text-muted-foreground font-mono text-xs">{s.phone || "-"}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs truncate max-w-[200px]">{s.address || "-"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
@@ -157,28 +236,28 @@ export function SuppliersPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>新增供應商</CardTitle>
+            <CardTitle>新增供应商</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>供應商名稱</Label>
-              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="如：東海鮮物貿易" />
+              <Label>供应商名称</Label>
+              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="如：东海鲜物贸易" />
             </div>
             <div className="space-y-2">
-              <Label>聯繫人</Label>
-              <Input value={newContact} onChange={(e) => setNewContact(e.target.value)} placeholder="如：張先生" />
+              <Label>联系人</Label>
+              <Input value={newContact} onChange={(e) => setNewContact(e.target.value)} placeholder="如：张先生" />
             </div>
             <div className="space-y-2">
-              <Label>電話</Label>
+              <Label>电话</Label>
               <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="如：02-12345678" />
             </div>
             <div className="space-y-2">
               <Label>地址</Label>
-              <Input value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="如：台北市中山區" />
+              <Input value={newAddress} onChange={(e) => setNewAddress(e.target.value)} placeholder="如：台北市中山区" />
             </div>
             <div className="space-y-2">
-              <Label>備註</Label>
-              <Input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="備註資訊" />
+              <Label>备注</Label>
+              <Input value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="备注信息" />
             </div>
             <Separator />
             <Button className="w-full" onClick={() => {
@@ -203,20 +282,60 @@ export function SuppliersPage({
         </Card>
       </div>
 
-      <Dialog open={!!editSupplier} onOpenChange={() => setEditSupplier(null)}>
+      {/* 新增商品 Dialog */}
+      <Dialog open={addProductOpen} onOpenChange={setAddProductOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>編輯供應商</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>新增商品</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>名稱</Label>
+              <Label>商品名称</Label>
+              <Input value={newProductName} onChange={(e) => setNewProductName(e.target.value)} placeholder="如：新鲜猪肉" />
+            </div>
+            <div className="space-y-2">
+              <Label>供应商</Label>
+              <Input value={newProductSupplier} onChange={(e) => setNewProductSupplier(e.target.value)} placeholder="如：东海鲜物贸易" />
+            </div>
+            <div className="space-y-2">
+              <Label>采购渠道</Label>
+              <Select value={newProductChannel} onValueChange={setNewProductChannel}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local">
+                    <span className="flex items-center gap-1"><Store className="h-3 w-3" />本地</span>
+                  </SelectItem>
+                  <SelectItem value="network">
+                    <span className="flex items-center gap-1"><Globe className="h-3 w-3" />网络</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddProductOpen(false)}>取消</Button>
+            <Button onClick={handleAddProduct} disabled={!newProductName.trim() || !newProductSupplier.trim()}>
+              <Plus className="mr-1 h-4 w-4" />添加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑供应商 Dialog */}
+      <Dialog open={!!editSupplier} onOpenChange={() => setEditSupplier(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>编辑供应商</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>名称</Label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>聯繫人</Label>
+              <Label>联系人</Label>
               <Input value={editContact} onChange={(e) => setEditContact(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>電話</Label>
+              <Label>电话</Label>
               <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
             </div>
             <div className="space-y-2">
@@ -224,7 +343,7 @@ export function SuppliersPage({
               <Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>備註</Label>
+              <Label>备注</Label>
               <Input value={editNote} onChange={(e) => setEditNote(e.target.value)} />
             </div>
           </div>
@@ -235,13 +354,26 @@ export function SuppliersPage({
         </DialogContent>
       </Dialog>
 
+      {/* 删除供应商确认 */}
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>確認刪除</DialogTitle></DialogHeader>
-          <p className="py-4 text-sm text-muted-foreground">確定要刪除供應商「{deleteConfirm?.name}」嗎？</p>
+          <DialogHeader><DialogTitle>确认删除</DialogTitle></DialogHeader>
+          <p className="py-4 text-sm text-muted-foreground">确定要删除供应商「{deleteConfirm?.name}」吗？</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>取消</Button>
-            <Button variant="destructive" onClick={() => { if (deleteConfirm) { onDeleteSupplier(deleteConfirm.id); } setDeleteConfirm(null); }}>刪除</Button>
+            <Button variant="destructive" onClick={() => { if (deleteConfirm) { onDeleteSupplier(deleteConfirm.id); } setDeleteConfirm(null); }}>删除</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除商品确认 */}
+      <Dialog open={!!deleteProductConfirm} onOpenChange={() => setDeleteProductConfirm(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>确认删除</DialogTitle></DialogHeader>
+          <p className="py-4 text-sm text-muted-foreground">确定要删除商品「{deleteProductConfirm?.product_name}」吗？</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteProductConfirm(null)}>取消</Button>
+            <Button variant="destructive" onClick={() => { if (deleteProductConfirm) { onDeleteSupplierProduct(deleteProductConfirm.id); } setDeleteProductConfirm(null); }}>删除</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

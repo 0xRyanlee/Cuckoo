@@ -25,6 +25,7 @@ import { OrdersPage } from "@/pages/orders-page";
 import { PrintPage } from "@/pages/print-page";
 import { PrintSettingsPage } from "@/pages/print-settings-page";
 import { PrintTemplatesPage } from "@/pages/print-templates-page";
+import { ExpensesPage } from "@/pages/expenses-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
@@ -79,6 +80,8 @@ function App() {
     purchaseOrders, selectedPurchaseOrder, setSelectedPurchaseOrder,
     productionOrders, selectedProductionOrder, setSelectedProductionOrder,
     stocktakes, selectedStocktake, setSelectedStocktake,
+    expenses, setExpenses,
+    supplierProducts, setSupplierProducts,
     loadData,
   } = useAppData();
 
@@ -101,6 +104,8 @@ function App() {
     setSelectedPurchaseOrder,
     setSelectedProductionOrder,
     setSelectedStocktake,
+    setExpenses,
+    setSupplierProducts,
   });
 
   useEffect(() => { loadData(); }, []);
@@ -168,6 +173,11 @@ function App() {
     handleCompleteStocktake,
     handleViewStocktake,
     handleDeleteStocktake,
+    handleCreateExpense,
+    handleUpdateExpense,
+    handleDeleteExpense,
+    handleCreateSupplierProduct,
+    handleDeleteSupplierProduct,
     handleCreateBatch,
     handleAdjustInventory,
     handleRecordWastage,
@@ -274,7 +284,7 @@ function App() {
                 <Route path="/inventory" element={<InventoryPage inventorySummary={inventorySummary} inventoryBatches={inventoryBatches} inventoryTxns={inventoryTxns} materials={materials} recipes={recipes} suppliers={suppliers} onCreateBatch={handleCreateBatch} onAdjustInventory={handleAdjustInventory} onRecordWastage={handleRecordWastage} onDeleteBatch={handleDeleteBatch} onUpdateMaterial={handleUpdateMaterial} searchQuery={searchQuery} />} />
                 <Route path="/menu" element={<MenuPage menuCategories={menuCategories} menuItems={menuItems} recipes={recipes} onCreateMenuCategory={handleCreateMenuCategory} onCreateMenuItem={handleCreateMenuItemFull} onCreatePendingRecipeForMenu={handleCreatePendingRecipeForMenu} onToggleAvailability={handleToggleMenuItem} onBatchToggleAvailability={handleBatchToggleMenuItem} onUpdateMenuItem={handleUpdateMenuItem} onDeleteMenuItem={handleDeleteMenuItem} onUpdateMenuCategory={handleUpdateMenuCategory} onDeleteMenuCategory={handleDeleteMenuCategory} onGetSpecs={handleGetSpecs} onCreateSpec={handleCreateSpec} onUpdateSpec={handleUpdateSpec} onDeleteSpec={handleDeleteSpec} searchQuery={searchQuery} />} />
                 <Route path="/pos" element={<POSPage menuCategories={menuCategories} menuItems={menuItems} onCreateOrder={handlePOSOrder} onCreateAndSubmit={handlePOSAndSubmit} onGetSpecs={handleGetSpecs} searchQuery={searchQuery} loading={loading} />} />
-                <Route path="/suppliers" element={<SuppliersPage suppliers={suppliers} onCreateSupplier={handleCreateSupplier} onUpdateSupplier={handleUpdateSupplier} onDeleteSupplier={handleDeleteSupplier} searchQuery={searchQuery} />} />
+                <Route path="/suppliers" element={<SuppliersPage suppliers={suppliers} supplierProducts={supplierProducts} onCreateSupplier={handleCreateSupplier} onUpdateSupplier={handleUpdateSupplier} onDeleteSupplier={handleDeleteSupplier} onCreateSupplierProduct={handleCreateSupplierProduct} onDeleteSupplierProduct={handleDeleteSupplierProduct} searchQuery={searchQuery} />} />
                 <Route path="/orders" element={<OrdersPage orders={orders} selectedOrder={selectedOrder} menuItems={Object.fromEntries(menuItems.map((item) => [item.id, item.name]))} materials={materials} onCreateOrder={handleCreateOrder} onSubmitOrder={handleSubmitOrder} onCancelOrder={handleCancelOrder} onBatchCancelOrder={handleBatchCancelOrder} onViewOrder={handleViewOrder} onViewOrderWithModifiers={async (id: number) => { const orderData = await invoke<OrderWithItems>("get_order_with_items", { orderId: id }); const modifiers: Record<number, OrderItemModifier[]> = {}; for (const item of orderData.items) { try { modifiers[item.id] = await handleLoadModifiers(item.id); } catch { modifiers[item.id] = []; } } return { orderData, modifiers }; }} onAddModifier={handleAddModifier} onDeleteModifier={handleDeleteModifier} onLoadModifiers={handleLoadModifiers} onLoadMore={handleLoadMoreOrders} hasMore={ordersHasMore} searchQuery={searchQuery} />} />
                 <Route path="/kds" element={<KDSPage allTickets={kdsTickets} stations={stations} menuItemNames={Object.fromEntries(menuItems.map((m) => [m.id, m.name]))} onStartTicket={async (id) => { try { await invoke("start_ticket", { ticketId: id, operator: null }); toast.success("工单已开始"); loadData(); } catch (e) { toast.error("开始工单失败", { description: String(e) }); } }} onFinishTicket={async (id) => { const ticket = kdsTickets.find((t) => t.id === id); if (ticket) { await handleFinishTicket(ticket); } else { await invoke("finish_ticket", { ticketId: id, operator: null }); toast.success("工单已完成"); loadData(); } }} onRefresh={handleLoadKDS} />} />
                 <Route path="/attributes" element={<AttributesPage attributeTemplates={attributeTemplates} onRefresh={loadData} />} />
@@ -284,6 +294,7 @@ function App() {
                 <Route path="/production-orders" element={<ProductionOrdersPage orders={productionOrders} recipes={recipes} onCreateOrder={handleCreateProductionOrder} onStartOrder={handleStartProductionOrder} onCompleteOrder={handleCompleteProductionOrder} onViewOrder={handleViewProductionOrder} onDeleteOrder={handleDeleteProductionOrder} selectedOrder={selectedProductionOrder} searchQuery={searchQuery} />} />
                 <Route path="/stocktakes" element={<StocktakesPage stocktakes={stocktakes} onCreateStocktake={handleCreateStocktake} onUpdateItem={handleUpdateStocktakeItem} onCompleteStocktake={handleCompleteStocktake} onViewStocktake={handleViewStocktake} onDeleteStocktake={handleDeleteStocktake} selectedStocktake={selectedStocktake} searchQuery={searchQuery} />} />
                 <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/expenses" element={<ExpensesPage expenses={expenses} onCreateExpense={handleCreateExpense} onUpdateExpense={handleUpdateExpense} onDeleteExpense={handleDeleteExpense} />} />
                 <Route path="/print" element={<PrintPage />} />
                 <Route path="/print-templates" element={<PrintTemplatesPage />} />
                 <Route path="/print-settings" element={<PrintSettingsPage />} />

@@ -6,7 +6,7 @@ import type {
   RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderWithItems, KitchenStation,
   TicketWithItems, InventoryBatch, InventorySummary, InventoryTxn, AttributeTemplate,
   Supplier, MaterialState, PurchaseOrder, PurchaseOrderWithItems,
-  ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems
+  ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Expense, SupplierProduct
 } from "../types";
 
 // Wraps invoke so any failure is logged with the operation name before re-throwing.
@@ -51,6 +51,8 @@ export function useAppData() {
   const [selectedProductionOrder, setSelectedProductionOrder] = useState<ProductionOrderWithItems | null>(null);
   const [stocktakes, setStocktakes] = useState<Stocktake[]>([]);
   const [selectedStocktake, setSelectedStocktake] = useState<StocktakeWithItems | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -79,6 +81,8 @@ export function useAppData() {
       setPurchaseOrders(await tracked("get_purchase_orders", invoke<PurchaseOrder[]>("get_purchase_orders")));
       setProductionOrders(await tracked("get_production_orders", invoke<ProductionOrder[]>("get_production_orders")));
       setStocktakes(await tracked("get_stocktakes", invoke<Stocktake[]>("get_stocktakes")));
+      setExpenses(await tracked("get_expenses", invoke<Expense[]>("get_expenses", { expenseType: null, startDate: null, endDate: null })));
+      setSupplierProducts(await tracked("get_supplier_products", invoke<SupplierProduct[]>("get_supplier_products", { channel: null })));
       const pendingTickets = await tracked("get_tickets_pending", invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "pending" }));
       const startedTickets = await tracked("get_tickets_started", invoke<TicketWithItems[]>("get_all_tickets_with_items", { status: "started" }));
       setKdsTickets([...pendingTickets, ...startedTickets]);
@@ -118,6 +122,8 @@ export function useAppData() {
     selectedProductionOrder, setSelectedProductionOrder,
     stocktakes, setStocktakes,
     selectedStocktake, setSelectedStocktake,
+    expenses, setExpenses,
+    supplierProducts, setSupplierProducts,
     loadData,
   };
 }

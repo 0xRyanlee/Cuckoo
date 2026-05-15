@@ -1,5 +1,5 @@
 use tauri::State;
-use crate::database::{Database, MaterialWithTags, Unit, MaterialCategory, Tag, MaterialState, Supplier, Recipe, RecipeWithItems, RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderItem, OrderItemModifier, KitchenStation, KitchenTicket, InventoryBatch, InventorySummary, AttributeTemplate, EntityAttribute, InventoryTxn, MenuItemSpec, PrinterConfig, PrintTask, PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Notification, Customer, Coupon};
+use crate::database::{Database, MaterialWithTags, Unit, MaterialCategory, Tag, MaterialState, Supplier, Expense, SupplierProduct, Recipe, RecipeWithItems, RecipeCostResult, RecipeType, MenuItem, MenuCategory, Order, OrderItem, OrderItemModifier, KitchenStation, KitchenTicket, InventoryBatch, InventorySummary, AttributeTemplate, EntityAttribute, InventoryTxn, MenuItemSpec, PrinterConfig, PrintTask, PurchaseOrder, PurchaseOrderWithItems, ProductionOrder, ProductionOrderWithItems, Stocktake, StocktakeWithItems, Notification, Customer, Coupon, RecipeComponentType, OrderComponentType};
 use crate::printer::{self, EscPosBuilder, LanPrinter, scan_lan_printers as LAN_SCAN};
 use serde::{Deserialize, Serialize};
 
@@ -252,6 +252,66 @@ pub fn create_supplier(state: State<AppState>, req: CreateSupplierRequest) -> Re
     state.db.create_supplier(&req.name, req.phone.as_deref(), req.contact_person.as_deref()).map_err(|e| e.to_string())
 }
 
+// ==================== 日常支出 API ====================
+
+#[tauri::command]
+pub fn get_expenses(state: State<AppState>, expense_type: Option<String>, start_date: Option<String>, end_date: Option<String>) -> Result<Vec<Expense>, String> {
+    state.db.get_expenses(expense_type.as_deref(), start_date.as_deref(), end_date.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateExpenseRequest {
+    pub expense_type: String,
+    pub amount: f64,
+    pub expense_date: String,
+    pub note: Option<String>,
+    pub operator: Option<String>,
+}
+
+#[tauri::command]
+pub fn create_expense(state: State<AppState>, req: CreateExpenseRequest) -> Result<i64, String> {
+    state.db.create_expense(&req.expense_type, req.amount, &req.expense_date, req.note.as_deref(), req.operator.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_expense(state: State<AppState>, id: i64, expense_type: Option<String>, amount: Option<f64>, expense_date: Option<String>, note: Option<String>) -> Result<(), String> {
+    state.db.update_expense(id, expense_type.as_deref(), amount, expense_date.as_deref(), note.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_expense(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_expense(id).map_err(|e| e.to_string())
+}
+
+// ==================== 供應商商品 API ====================
+
+#[tauri::command]
+pub fn get_supplier_products(state: State<AppState>, channel: Option<String>) -> Result<Vec<SupplierProduct>, String> {
+    state.db.get_supplier_products(channel.as_deref()).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSupplierProductRequest {
+    pub product_name: String,
+    pub supplier_name: String,
+    pub channel: String,
+}
+
+#[tauri::command]
+pub fn create_supplier_product(state: State<AppState>, req: CreateSupplierProductRequest) -> Result<i64, String> {
+    state.db.create_supplier_product(&req.product_name, &req.supplier_name, &req.channel).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_supplier_product(state: State<AppState>, id: i64) -> Result<(), String> {
+    state.db.delete_supplier_product(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_order_cost(state: State<AppState>, order_id: i64) -> Result<f64, String> {
+    state.db.get_order_cost(order_id).map_err(|e| e.to_string())
+}
+
 // ==================== 屬性模板 API ====================
 
 #[tauri::command]
@@ -320,6 +380,16 @@ pub fn get_recipes(state: State<AppState>, recipe_type: Option<String>) -> Resul
 #[tauri::command]
 pub fn get_recipe_types(state: State<AppState>) -> Result<Vec<RecipeType>, String> {
     state.db.get_recipe_types().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_recipe_component_types(state: State<AppState>, category: Option<String>) -> Result<Vec<RecipeComponentType>, String> {
+    state.db.get_recipe_component_types(category.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_order_component_types(state: State<AppState>, is_packaging: Option<bool>) -> Result<Vec<OrderComponentType>, String> {
+    state.db.get_order_component_types(is_packaging).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -474,7 +544,10 @@ pub fn submit_order(state: State<AppState>, order_id: i64) -> Result<Vec<String>
 }
 
 #[tauri::command]
-pub fn cancel_order(state: State<AppState>, order_id: i64) -> Result<Vec<String>, String> {
+pub fn cancel_order(state: State<AppState>, order_id: i64, is_served: bool) -> Result<Vec<String>, String> {
+    if is_served {
+        state.db.confirm_inventory_for_order(order_id).map_err(|e| e.to_string())?;
+    }
     state.db.release_inventory_for_order(order_id).map_err(|e| e.to_string())
 }
 

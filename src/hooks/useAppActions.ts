@@ -3,7 +3,7 @@ import { appLogger, formatError } from "@/lib/logger";
 import type {
   MaterialCategory, RecipeCostResult, MenuItem, MenuCategory, POSCartItem, MenuItemSpec,
   TicketWithItems, Order, OrderWithItems, OrderItemModifier, Recipe, RecipeWithItems,
-  PurchaseOrderWithItems, ProductionOrderWithItems, StocktakeWithItems, Material, Supplier, Unit, InventoryBatch
+  PurchaseOrderWithItems, ProductionOrderWithItems, StocktakeWithItems, Material, Supplier, Unit, InventoryBatch, Expense, SupplierProduct
 } from "../types";
 import { toast } from "sonner";
 
@@ -26,6 +26,8 @@ export interface UseAppActionsParams {
   setSelectedPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderWithItems | null>>;
   setSelectedProductionOrder: React.Dispatch<React.SetStateAction<ProductionOrderWithItems | null>>;
   setSelectedStocktake: React.Dispatch<React.SetStateAction<StocktakeWithItems | null>>;
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
+  setSupplierProducts: React.Dispatch<React.SetStateAction<SupplierProduct[]>>;
 }
 
 export function useAppActions({
@@ -47,6 +49,8 @@ export function useAppActions({
   setSelectedPurchaseOrder,
   setSelectedProductionOrder,
   setSelectedStocktake,
+  setExpenses: _setExpenses,
+  setSupplierProducts: _setSupplierProducts,
 }: UseAppActionsParams) {
   function normalizeRecipeWithItems(raw: unknown): RecipeWithItems {
     if (raw && typeof raw === "object" && "recipe" in raw && "items" in raw) {
@@ -349,9 +353,9 @@ export function useAppActions({
     catch (e) { logError("submit_order", e, "提交订单失败", { orderId }); }
   };
 
-  const handleCancelOrder = async (orderId: number) => {
-    try { await invoke("cancel_order", { orderId }); toast.success("订单已取消"); loadData(); }
-    catch (e) { logError("cancel_order", e, "取消订单失败", { orderId }); }
+  const handleCancelOrder = async (orderId: number, is_served: boolean = false) => {
+    try { await invoke("cancel_order", { orderId, isServed: is_served }); toast.success("订单已取消"); loadData(); }
+    catch (e) { logError("cancel_order", e, "取消订单失败", { orderId, is_served }); }
   };
 
   const handleViewOrder = async (orderId: number) => {
@@ -502,6 +506,38 @@ export function useAppActions({
     catch (e) { logError("delete_stocktake", e, "删除盘点失败", { stocktake_id }); }
   };
 
+  // 日常支出
+  const handleCreateExpense = async (data: { expense_type: string; amount: number; expense_date: string; note: string }) => {
+    try {
+      await invoke("create_expense", { req: { expense_type: data.expense_type, amount: data.amount, expense_date: data.expense_date, note: data.note || null, operator: null } });
+      toast.success("支出已记录", { description: `¥${data.amount}` });
+      loadData();
+    } catch (e) { logError("create_expense", e, "记录支出失败", { expense_type: data.expense_type }); }
+  };
+
+  const handleUpdateExpense = async (id: number, data: { expense_type?: string; amount?: number; expense_date?: string; note?: string }) => {
+    try { await invoke("update_expense", { id, expenseType: data.expense_type || null, amount: data.amount ?? null, expenseDate: data.expense_date || null, note: data.note || null }); toast.success("支出已更新"); loadData(); }
+    catch (e) { logError("update_expense", e, "更新支出失败", { id }); }
+  };
+
+  const handleDeleteExpense = async (id: number) => {
+    try { await invoke("delete_expense", { id }); toast.success("支出已删除"); loadData(); }
+    catch (e) { logError("delete_expense", e, "删除支出失败", { id }); }
+  };
+
+  const handleCreateSupplierProduct = async (data: { product_name: string; supplier_name: string; channel: string }) => {
+    try {
+      await invoke("create_supplier_product", { req: data });
+      toast.success("商品已添加");
+      loadData();
+    } catch (e) { logError("create_supplier_product", e, "添加商品失败", { product_name: data.product_name }); }
+  };
+
+  const handleDeleteSupplierProduct = async (id: number) => {
+    try { await invoke("delete_supplier_product", { id }); toast.success("商品已删除"); loadData(); }
+    catch (e) { logError("delete_supplier_product", e, "删除商品失败", { id }); }
+  };
+
   // 批次
   const handleCreateBatch = async (data: { material_id: number; lot_no: string; quantity: number; cost_per_unit: number; supplier_id: number | null; expiry_date: string | null; production_date: string | null; ice_coating_rate?: number | null; quality_rate?: number | null; seasonal_factor?: number }) => {
     try {
@@ -628,6 +664,10 @@ export function useAppActions({
     handleCreateProductionOrder, handleStartProductionOrder, handleCompleteProductionOrder, handleViewProductionOrder, handleDeleteProductionOrder,
     // 盤點
     handleCreateStocktake, handleUpdateStocktakeItem, handleCompleteStocktake, handleViewStocktake, handleDeleteStocktake,
+    // 日常支出
+    handleCreateExpense, handleUpdateExpense, handleDeleteExpense,
+    // 供應商商品
+    handleCreateSupplierProduct, handleDeleteSupplierProduct,
     // 批次
     handleCreateBatch, handleAdjustInventory, handleRecordWastage, handleDeleteBatch,
     // KDS

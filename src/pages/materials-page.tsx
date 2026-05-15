@@ -278,6 +278,20 @@ export function MaterialsPage({
                   </div>
                 ))}
               </div>
+              <Separator />
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">快速添加</h4>
+                <div className="flex flex-wrap gap-2">
+                  {["一次性消耗品", "原材料", "半成品", "包装材料"].map((name) => {
+                    const code = name.charAt(0).toUpperCase() + name.replace(/\s/g, "").slice(1);
+                    return (
+                      <Button key={name} variant="outline" size="sm" onClick={() => { setNewCategoryCode(code); setNewCategoryName(name); }}>
+                        {name}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -321,6 +335,9 @@ export function MaterialsPage({
                 </SelectContent>
               </Select>
             </div>
+            <p className="text-xs text-muted-foreground bg-muted p-2 rounded">
+              单位与标签锁定，如需修改请联系管理员或删除后重新添加。
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditMaterial(null)}>取消</Button>

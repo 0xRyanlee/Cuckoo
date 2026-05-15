@@ -79,6 +79,39 @@ pub struct Supplier {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Expense {
+    pub id: i64,
+    pub expense_type: String,
+    pub amount: f64,
+    pub expense_date: String,
+    pub note: Option<String>,
+    pub operator: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SupplierProduct {
+    pub id: i64,
+    pub product_name: String,
+    pub supplier_name: String,
+    pub channel: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct MaterialCostHistory {
+    pub id: i64,
+    pub material_id: i64,
+    pub cost_per_unit: f64,
+    pub source_type: String,
+    pub source_id: Option<i64>,
+    pub batch_no: Option<String>,
+    pub operator: Option<String>,
+    pub created_at: String,
+}
+
 // ==================== 配方類型 ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -95,6 +128,30 @@ pub struct Recipe {
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RecipeComponentType {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub category: String,
+    pub sort_no: i32,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OrderComponentType {
+    pub id: i64,
+    pub code: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_packaging: bool,
+    pub cost_per_unit: f64,
+    pub unit: Option<String>,
+    pub sort_no: i32,
+    pub is_active: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -763,6 +820,50 @@ impl Database {
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            -- ==================== 日常支出 ====================
+
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                expense_type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                expense_date TEXT NOT NULL DEFAULT (date('now')),
+                note TEXT,
+                operator TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_expenses_type ON expenses(expense_type);
+            CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
+
+            -- ==================== 供應商商品 ====================
+
+            CREATE TABLE IF NOT EXISTS supplier_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_name TEXT NOT NULL,
+                supplier_name TEXT NOT NULL,
+                channel TEXT NOT NULL DEFAULT 'local',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- ==================== 材料成本歷史 ====================
+
+            CREATE TABLE IF NOT EXISTS material_cost_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                material_id INTEGER NOT NULL,
+                cost_per_unit REAL NOT NULL,
+                source_type TEXT NOT NULL,
+                source_id INTEGER,
+                batch_no TEXT,
+                operator TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (material_id) REFERENCES materials(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_cost_history_material ON material_cost_history(material_id);
+            CREATE INDEX IF NOT EXISTS idx_cost_history_date ON material_cost_history(created_at);
             
             -- ==================== 屬性系統 ====================
             
@@ -827,6 +928,7 @@ impl Database {
                 FOREIGN KEY (unit_id) REFERENCES units(id)
             );
             CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe ON recipe_items(recipe_id);
+            CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe_type ON recipe_items(recipe_id, item_type);
 
             CREATE TABLE IF NOT EXISTS recipe_types (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -849,6 +951,33 @@ impl Database {
                 is_active INTEGER NOT NULL DEFAULT 1,
                 FOREIGN KEY (recipe_id) REFERENCES recipes(id)
             );
+
+            -- ==================== 配方/訂單組成結構 ====================
+
+            CREATE TABLE IF NOT EXISTS recipe_component_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                description TEXT,
+                category TEXT NOT NULL,
+                sort_no INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS order_component_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                description TEXT,
+                is_packaging INTEGER NOT NULL DEFAULT 0,
+                cost_per_unit REAL NOT NULL DEFAULT 0,
+                unit TEXT,
+                sort_no INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_recipe_component_types_category ON recipe_component_types(category);
+            CREATE INDEX IF NOT EXISTS idx_order_component_types_packaging ON order_component_types(is_packaging);
             
             -- ==================== 庫存系統 ====================
             
@@ -945,6 +1074,7 @@ impl Database {
                 sort_no INTEGER DEFAULT 0,
                 FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
             );
+            CREATE INDEX IF NOT EXISTS idx_menu_item_specs_item ON menu_item_specs(menu_item_id);
             
             -- ==================== 訂單系統 ====================
             
@@ -962,6 +1092,7 @@ impl Database {
             );
             CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
             CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
+            CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category_id);
             
             CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1025,6 +1156,7 @@ impl Database {
                 FOREIGN KEY (order_item_id) REFERENCES order_items(id),
                 FOREIGN KEY (material_id) REFERENCES materials(id)
             );
+            CREATE INDEX IF NOT EXISTS idx_order_item_modifiers_item ON order_item_modifiers(order_item_id);
             
             -- ==================== KDS 系統 ====================
             
@@ -1044,6 +1176,8 @@ impl Database {
                 FOREIGN KEY (station_id) REFERENCES kitchen_stations(id),
                 FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
             );
+            CREATE INDEX IF NOT EXISTS idx_station_menu_items_station ON station_menu_items(station_id);
+            CREATE INDEX IF NOT EXISTS idx_station_menu_items_menu_item ON station_menu_items(menu_item_id);
             
             CREATE TABLE IF NOT EXISTS kitchen_tickets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1254,8 +1388,13 @@ impl Database {
             CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_categories_name ON menu_categories(name);
             "
         )?;
-        // Migrations for existing databases
-        let _ = conn.execute("ALTER TABLE materials ADD COLUMN min_qty REAL NOT NULL DEFAULT 10.0", []);
+        // Migrations for existing databases — errors are expected when column already exists
+        let has_min_qty: bool = conn
+            .query_row("SELECT COUNT(*) FROM pragma_table_info('materials') WHERE name='min_qty'", [], |r| r.get::<_, i64>(0))
+            .unwrap_or(0) > 0;
+        if !has_min_qty {
+            conn.execute("ALTER TABLE materials ADD COLUMN min_qty REAL NOT NULL DEFAULT 10.0", [])?;
+        }
         Ok(())
     }
 
@@ -1434,6 +1573,14 @@ impl Database {
 
     pub fn create_material_category(&self, code: &str, name: &str, sort_no: i32) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
+        if let Ok(existing_id) = conn.query_row(
+            "SELECT id FROM material_categories WHERE code = ?1 AND is_active = 0",
+            params![code],
+            |row| row.get::<_, i64>(0),
+        ) {
+            conn.execute("UPDATE material_categories SET is_active = 1, name = ?1, sort_no = ?2 WHERE id = ?3", params![name, sort_no, existing_id])?;
+            return Ok(existing_id);
+        }
         conn.execute("INSERT INTO material_categories (code, name, sort_no) VALUES (?1, ?2, ?3)", params![code, name, sort_no])?;
         Ok(conn.last_insert_rowid())
     }
@@ -1461,6 +1608,14 @@ impl Database {
 
     pub fn create_tag(&self, code: &str, name: &str, color: Option<&str>) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
+        if let Ok(existing_id) = conn.query_row(
+            "SELECT id FROM tags WHERE code = ?1 AND is_active = 0",
+            params![code],
+            |row| row.get::<_, i64>(0),
+        ) {
+            conn.execute("UPDATE tags SET is_active = 1, name = ?1, color = ?2 WHERE id = ?3", params![name, color, existing_id])?;
+            return Ok(existing_id);
+        }
         conn.execute("INSERT INTO tags (code, name, color) VALUES (?1, ?2, ?3)", params![code, name, color])?;
         Ok(conn.last_insert_rowid())
     }
@@ -1517,6 +1672,17 @@ impl Database {
 
     pub fn create_material(&self, code: &str, name: &str, category_id: Option<i64>, base_unit_id: i64, shelf_life_days: Option<i32>) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
+        if let Ok(existing_id) = conn.query_row(
+            "SELECT id FROM materials WHERE code = ?1 AND is_active = 0",
+            params![code],
+            |row| row.get::<_, i64>(0),
+        ) {
+            conn.execute(
+                "UPDATE materials SET is_active = 1, name = ?1, category_id = ?2, base_unit_id = ?3, shelf_life_days = ?4 WHERE id = ?5",
+                params![name, category_id, base_unit_id, shelf_life_days, existing_id],
+            )?;
+            return Ok(existing_id);
+        }
         conn.execute(
             "INSERT INTO materials (code, name, category_id, base_unit_id, shelf_life_days) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![code, name, category_id, base_unit_id, shelf_life_days],
@@ -1630,6 +1796,115 @@ impl Database {
         Ok(())
     }
 
+    // ==================== 日常支出 API ====================
+
+    pub fn get_expenses(&self, expense_type: Option<&str>, start_date: Option<&str>, end_date: Option<&str>) -> Result<Vec<Expense>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = "SELECT id, expense_type, amount, expense_date, note, operator, is_active, created_at FROM expenses WHERE is_active = 1".to_string();
+        let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if expense_type.is_some() {
+            sql.push_str(" AND expense_type = ?1");
+            args.push(Box::new(expense_type.unwrap().to_string()));
+        }
+        if start_date.is_some() {
+            let idx = args.len() + 1;
+            sql.push_str(&format!(" AND expense_date >= ?{}", idx));
+            args.push(Box::new(start_date.unwrap().to_string()));
+        }
+        if end_date.is_some() {
+            let idx = args.len() + 1;
+            sql.push_str(&format!(" AND expense_date <= ?{}", idx));
+            args.push(Box::new(end_date.unwrap().to_string()));
+        }
+        sql.push_str(" ORDER BY expense_date DESC, id DESC");
+        let mut stmt = conn.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|b| b.as_ref()).collect();
+        let expenses = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(Expense { id: row.get(0)?, expense_type: row.get(1)?, amount: row.get(2)?, expense_date: row.get(3)?, note: row.get(4)?, operator: row.get(5)?, is_active: row.get::<_, i32>(6)? != 0, created_at: row.get(7)? })
+        })?.collect::<Result<Vec<_>>>()?;
+        Ok(expenses)
+    }
+
+    pub fn create_expense(&self, expense_type: &str, amount: f64, expense_date: &str, note: Option<&str>, operator: Option<&str>) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("INSERT INTO expenses (expense_type, amount, expense_date, note, operator) VALUES (?1, ?2, ?3, ?4, ?5)", params![expense_type, amount, expense_date, note, operator])?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn update_expense(&self, id: i64, expense_type: Option<&str>, amount: Option<f64>, expense_date: Option<&str>, note: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        if let Some(t) = expense_type { conn.execute("UPDATE expenses SET expense_type = ?1 WHERE id = ?2", params![t, id])?; }
+        if let Some(a) = amount { conn.execute("UPDATE expenses SET amount = ?1 WHERE id = ?2", params![a, id])?; }
+        if let Some(d) = expense_date { conn.execute("UPDATE expenses SET expense_date = ?1 WHERE id = ?2", params![d, id])?; }
+        if let Some(n) = note { conn.execute("UPDATE expenses SET note = ?1 WHERE id = ?2", params![n, id])?; }
+        Ok(())
+    }
+
+    pub fn delete_expense(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE expenses SET is_active = 0 WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn get_supplier_products(&self, channel: Option<&str>) -> Result<Vec<SupplierProduct>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = if channel.is_some() {
+            "SELECT id, product_name, supplier_name, channel FROM supplier_products WHERE is_active = 1 AND channel = ?1 ORDER BY id"
+        } else {
+            "SELECT id, product_name, supplier_name, channel FROM supplier_products WHERE is_active = 1 ORDER BY id"
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let items = if let Some(ch) = channel {
+            stmt.query_map(params![ch], |row| {
+                Ok(SupplierProduct { id: row.get(0)?, product_name: row.get(1)?, supplier_name: row.get(2)?, channel: row.get(3)? })
+            })?.collect::<Result<Vec<_>>>()?
+        } else {
+            stmt.query_map([], |row| {
+                Ok(SupplierProduct { id: row.get(0)?, product_name: row.get(1)?, supplier_name: row.get(2)?, channel: row.get(3)? })
+            })?.collect::<Result<Vec<_>>>()?
+        };
+        Ok(items)
+    }
+
+    pub fn create_supplier_product(&self, product_name: &str, supplier_name: &str, channel: &str) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("INSERT INTO supplier_products (product_name, supplier_name, channel) VALUES (?1, ?2, ?3)", params![product_name, supplier_name, channel])?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn delete_supplier_product(&self, id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE supplier_products SET is_active = 0 WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Computes the food cost for an order by summing each item's recipe cost_per_unit × qty.
+    /// Respects spec qty_multiplier. Returns 0.0 if a menu item has no recipe.
+    pub fn get_order_cost(&self, order_id: i64) -> Result<f64> {
+        let items: Vec<(f64, Option<i64>, f64)> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT oi.qty, mi.recipe_id, COALESCE(mis.qty_multiplier, 1.0)
+                 FROM order_items oi
+                 JOIN menu_items mi ON mi.id = oi.menu_item_id
+                 LEFT JOIN menu_item_specs mis ON mis.menu_item_id = mi.id AND mis.spec_code = oi.spec_code
+                 WHERE oi.order_id = ?1"
+            )?;
+            let result = stmt.query_map(params![order_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                .collect::<Result<Vec<_>>>()?;
+            result
+        };
+        let mut total = 0.0;
+        for (qty, recipe_id, qty_multiplier) in items {
+            if let Some(rid) = recipe_id {
+                if let Ok(cost) = self.calculate_recipe_cost(rid) {
+                    total += qty * qty_multiplier * cost.cost_per_unit;
+                }
+            }
+        }
+        Ok(total)
+    }
+
     pub fn get_attribute_templates(&self, entity_type: Option<&str>, category: Option<&str>) -> Result<Vec<AttributeTemplate>> {
         let conn = self.conn.lock().unwrap();
         let query = match (entity_type, category) {
@@ -1740,6 +2015,40 @@ impl Database {
         Ok(items)
     }
 
+    pub fn get_recipe_component_types(&self, category: Option<&str>) -> Result<Vec<RecipeComponentType>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = if category.is_some() {
+            "SELECT id, code, name, description, category, sort_no, is_active FROM recipe_component_types WHERE is_active = 1 AND category = ?1 ORDER BY sort_no"
+        } else {
+            "SELECT id, code, name, description, category, sort_no, is_active FROM recipe_component_types WHERE is_active = 1 ORDER BY sort_no"
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let items = if let Some(cat) = category {
+            stmt.query_map(params![cat], |row| {
+                Ok(RecipeComponentType { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, description: row.get(3)?, category: row.get(4)?, sort_no: row.get(5)?, is_active: row.get::<_, i32>(6)? != 0 })
+            })?.collect::<Result<Vec<_>>>()?
+        } else {
+            stmt.query_map([], |row| {
+                Ok(RecipeComponentType { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, description: row.get(3)?, category: row.get(4)?, sort_no: row.get(5)?, is_active: row.get::<_, i32>(6)? != 0 })
+            })?.collect::<Result<Vec<_>>>()?
+        };
+        Ok(items)
+    }
+
+    pub fn get_order_component_types(&self, is_packaging: Option<bool>) -> Result<Vec<OrderComponentType>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = match is_packaging {
+            Some(true) => "SELECT id, code, name, description, is_packaging, cost_per_unit, unit, sort_no, is_active FROM order_component_types WHERE is_active = 1 AND is_packaging = 1 ORDER BY sort_no",
+            Some(false) => "SELECT id, code, name, description, is_packaging, cost_per_unit, unit, sort_no, is_active FROM order_component_types WHERE is_active = 1 AND is_packaging = 0 ORDER BY sort_no",
+            None => "SELECT id, code, name, description, is_packaging, cost_per_unit, unit, sort_no, is_active FROM order_component_types WHERE is_active = 1 ORDER BY sort_no",
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let items: Vec<OrderComponentType> = stmt.query_map([], |row| {
+            Ok(OrderComponentType { id: row.get(0)?, code: row.get(1)?, name: row.get(2)?, description: row.get(3)?, is_packaging: row.get::<_, i32>(4)? != 0, cost_per_unit: row.get(5)?, unit: row.get(6)?, sort_no: row.get(7)?, is_active: row.get::<_, i32>(8)? != 0 })
+        })?.collect::<Result<Vec<_>>>()?;
+        Ok(items)
+    }
+
     pub fn create_recipe_type(&self, code: &str, name: &str, description: Option<&str>, sort_no: i32) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -1800,6 +2109,34 @@ impl Database {
             "DELETE FROM recipes WHERE code IN ('RCP001', 'RCP002', 'RCP003')",
             [],
         )?;
+
+        // 菜品組成結構（Recipe Component Types）
+        let recipe_components = [
+            ("料油", "lsy", "base", "油脂基底，玉米油+香辛料熬製"),
+            ("調味蚝油", "dthy", "base", "蚝油+水+調味料攪拌"),
+            ("醬料", "jiangliao", "base", "辣椒+麻椒+花椒+調味料熬製"),
+            ("食材", "shicai", "main", "主要原材料"),
+            ("調味品", "tiaoweipin", "main", "鹽、糖、醬油等調料"),
+            ("餐盒", "canhe", "packaging", "包裝容器"),
+        ];
+        for (name, code, cat, desc) in recipe_components {
+            conn.execute("INSERT OR IGNORE INTO recipe_component_types (code, name, category, description) VALUES (?1, ?2, ?3, ?4)", params![code, name, cat, desc])?;
+        }
+
+        // 訂單組成結構（Order Component Types）
+        let order_components = [
+            ("外包裝袋", "waibao", false, 0.5, "個"),
+            ("保溫袋", "baowen", false, 1.0, "個"),
+            ("手套", "shoutao", false, 0.1, "雙"),
+            ("牙籤", "yaci", false, 0.05, "支"),
+            ("筷子", "kuaizi", false, 0.2, "雙"),
+            ("芝麻", "zhima", false, 0.3, "克"),
+            ("垃圾袋", "lajidai", false, 0.2, "個"),
+            ("配送費", "peisong", false, 5.0, "元"),
+        ];
+        for (name, code, is_pkg, cost, unit) in order_components {
+            conn.execute("INSERT OR IGNORE INTO order_component_types (code, name, is_packaging, cost_per_unit, unit) VALUES (?1, ?2, ?3, ?4, ?5)", params![code, name, is_pkg, cost, unit])?;
+        }
 
         conn.execute(
             "INSERT INTO recipes (code, name, recipe_type, output_qty) VALUES
@@ -3164,6 +3501,20 @@ impl Database {
             let production_date: Option<String> = None;
             conn.execute("INSERT INTO inventory_batches (material_id, state_id, lot_no, supplier_id, brand, spec, quantity, original_qty, cost_per_unit, production_date, expiry_date, ice_coating_rate, quality_rate, seasonal_factor) VALUES (?1, NULL, ?2, ?3, NULL, NULL, ?4, ?4, ?5, ?6, ?7, NULL, NULL, 1.0)", params![material_id, lot_no, supplier_id, qty, cost_per_unit, production_date, expiry_date])?;
             let batch_id = conn.last_insert_rowid();
+
+            // 記錄成本歷史（如果單價變化）
+            if let Ok(last_cost) = conn.query_row::<f64, _, _>(
+                "SELECT cost_per_unit FROM material_cost_history WHERE material_id = ?1 ORDER BY created_at DESC LIMIT 1",
+                params![material_id],
+                |row| row.get(0),
+            ) {
+                if (last_cost - cost_per_unit).abs() > 0.001 {
+                    conn.execute("INSERT INTO material_cost_history (material_id, cost_per_unit, source_type, source_id, batch_no, operator) VALUES (?1, ?2, 'purchase', ?3, ?4, ?5)", params![material_id, cost_per_unit, po_id, lot_no, operator])?;
+                }
+            } else {
+                conn.execute("INSERT INTO material_cost_history (material_id, cost_per_unit, source_type, source_id, batch_no, operator) VALUES (?1, ?2, 'purchase', ?3, ?4, ?5)", params![material_id, cost_per_unit, po_id, lot_no, operator])?;
+            }
+
             let txn_no = format!("TXN{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
             conn.execute("INSERT INTO inventory_txns (txn_no, txn_type, ref_type, ref_id, lot_id, material_id, qty_delta, cost_delta, operator, note) VALUES (?1, 'purchase_in', 'purchase_order', ?2, last_insert_rowid(), ?3, ?4, 0.0, ?5, '採購入庫')", params![txn_no, po_id, material_id, qty, operator])?;
             conn.execute("UPDATE purchase_order_items SET received_qty = qty WHERE id = ?1", params![_item_id])?;
@@ -3275,15 +3626,19 @@ Ok(())
 
     pub fn get_stocktakes(&self, status: Option<&str>) -> Result<Vec<Stocktake>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, stocktake_no, status, operator, note, created_at, completed_at FROM stocktakes ORDER BY created_at DESC")?;
-        let stocktakes: Vec<Stocktake> = stmt.query_map([], |row| {
-            Ok(Stocktake { id: row.get(0)?, stocktake_no: row.get(1)?, status: row.get(2)?, operator: row.get(3)?, note: row.get(4)?, created_at: row.get(5)?, completed_at: row.get(6)? })
-        })?.collect::<Result<Vec<_>>>()?;
-        if let Some(s) = status {
-            Ok(stocktakes.into_iter().filter(|st| st.status == s).collect())
+        let sql = if status.is_some() {
+            "SELECT id, stocktake_no, status, operator, note, created_at, completed_at FROM stocktakes WHERE status = ?1 ORDER BY created_at DESC"
         } else {
-            Ok(stocktakes)
-        }
+            "SELECT id, stocktake_no, status, operator, note, created_at, completed_at FROM stocktakes ORDER BY created_at DESC"
+        };
+        let mut stmt = conn.prepare(sql)?;
+        let row_fn = |row: &rusqlite::Row| Ok(Stocktake { id: row.get(0)?, stocktake_no: row.get(1)?, status: row.get(2)?, operator: row.get(3)?, note: row.get(4)?, created_at: row.get(5)?, completed_at: row.get(6)? });
+        let result = if let Some(s) = status {
+            stmt.query_map(params![s], row_fn)?.collect::<Result<Vec<_>>>()?
+        } else {
+            stmt.query_map([], row_fn)?.collect::<Result<Vec<_>>>()?
+        };
+        Ok(result)
     }
 
     pub fn get_stocktake_with_items(&self, stocktake_id: i64) -> Result<StocktakeWithItems> {

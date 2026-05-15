@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, ShoppingCart, Eye, Send, X, Search, Filter, MinusCircle, PlusCircle, Package } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { parseSafeFloat } from "@/lib/utils";
 
@@ -60,7 +61,7 @@ interface OrdersPageProps {
   materials: Material[];
   onCreateOrder: () => void;
   onSubmitOrder: (id: number) => void;
-  onCancelOrder: (id: number) => void;
+  onCancelOrder: (id: number, is_served: boolean) => void;
   onBatchCancelOrder: (ids: number[]) => void;
   onViewOrder: (id: number) => void;
   onViewOrderWithModifiers: (id: number) => Promise<{ orderData: OrderWithItems; modifiers: Record<number, OrderItemModifier[]> }>;
@@ -98,8 +99,22 @@ export function OrdersPage({
   const [modifierQty, setModifierQty] = useState("1");
   const [modifierPriceDelta, setModifierPriceDelta] = useState("0");
   const [selectedOrders, setSelectedOrders] = useState<number[]>([]);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelTargetOrder, setCancelTargetOrder] = useState<Order | null>(null);
+  const [cancelIsServed, setCancelIsServed] = useState(false);
+  const [orderCost, setOrderCost] = useState<number | null>(null);
 
   const [itemModifiers, setItemModifiers] = useState<Record<number, OrderItemModifier[]>>({});
+
+  useEffect(() => {
+    if (!selectedOrder) { setOrderCost(null); return; }
+    let cancelled = false;
+    setOrderCost(null);
+    invoke<number>("get_order_cost", { orderId: selectedOrder.order.id })
+      .then((cost) => { if (!cancelled) setOrderCost(cost); })
+      .catch(() => { if (!cancelled) setOrderCost(null); });
+    return () => { cancelled = true; };
+  }, [selectedOrder?.order.id]);
 
   const toggleSelectOrder = (id: number) => {
     setSelectedOrders(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -236,7 +251,7 @@ export function OrdersPage({
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500" onClick={() => onSubmitOrder(order.id)}>
                                 <Send className="h-4 w-4" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onCancelOrder(order.id)}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setCancelTargetOrder(order); setCancelIsServed(false); setCancelDialogOpen(true); }}>
                                 <X className="h-4 w-4" />
                               </Button>
                             </>
@@ -276,6 +291,28 @@ export function OrdersPage({
                   <span className="text-muted-foreground">总额</span>
                   <span className="font-medium">¥{selectedOrder.order.amount_total.toFixed(2)}</span>
                 </div>
+                {orderCost !== null && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">食材成本</span>
+                      <span className="font-medium text-amber-600">¥{orderCost.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">毛利</span>
+                      <span className={`font-medium ${selectedOrder.order.amount_total - orderCost >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                        ¥{(selectedOrder.order.amount_total - orderCost).toFixed(2)}
+                        {selectedOrder.order.amount_total > 0 && (
+                          <span className="text-xs ml-1 opacity-70">
+                            ({((selectedOrder.order.amount_total - orderCost) / selectedOrder.order.amount_total * 100).toFixed(1)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </>
+                )}
+                {orderCost === null && (
+                  <div className="text-xs text-muted-foreground">（毛利核算中…）</div>
+                )}
               </div>
               <div>
                 <h4 className="text-sm font-medium mb-2">商品明细</h4>
@@ -330,6 +367,44 @@ export function OrdersPage({
         )}
       </div>
 
+      <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>取消订单</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              确定要取消订单「{cancelTargetOrder?.order_no}」吗？
+            </p>
+            <div className="space-y-2">
+              <Label>取消时是否扣除食材成本？</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={cancelIsServed ? "outline" : "default"}
+                  onClick={() => setCancelIsServed(false)}
+                >
+                  未出餐（不扣成本）
+                </Button>
+                <Button
+                  variant={cancelIsServed ? "default" : "outline"}
+                  onClick={() => setCancelIsServed(true)}
+                >
+                  已出餐（扣除食材）
+                </Button>
+              </div>
+              {cancelIsServed && (
+                <p className="text-xs text-amber-500">已出餐订单将扣除已用食材成本</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>取消</Button>
+            <Button variant="destructive" onClick={() => {
+              if (cancelTargetOrder) onCancelOrder(cancelTargetOrder.id, cancelIsServed);
+              setCancelDialogOpen(false);
+            }}>确认取消</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={modifierDialogOpen} onOpenChange={setModifierDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{modifierType === "add" ? "加料" : "去料"}</DialogTitle></DialogHeader>
@@ -345,11 +420,11 @@ export function OrdersPage({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>數量</Label>
+                <Label>数量</Label>
                 <Input type="number" value={modifierQty} onChange={(e) => setModifierQty(e.target.value)} step="0.01" />
               </div>
               <div className="space-y-2">
-                <Label>價格調整</Label>
+                <Label>价格调整</Label>
                 <Input type="number" value={modifierPriceDelta} onChange={(e) => setModifierPriceDelta(e.target.value)} step="0.01" />
               </div>
             </div>
@@ -357,28 +432,14 @@ export function OrdersPage({
           <DialogFooter>
             <Button variant="outline" onClick={() => setModifierDialogOpen(false)}>取消</Button>
             <Button onClick={() => {
-              if (!modifierOrderItemId || !modifierMaterialId) {
-                toast.error("请选择材料和数量");
-                return;
-              }
+              if (!modifierOrderItemId || !modifierMaterialId) { toast.error("请选择材料和数量"); return; }
               const qty = parseSafeFloat(modifierQty);
-              if (qty === null || qty <= 0) {
-                toast.error("数量格式错误");
-                return;
-              }
+              if (qty === null || qty <= 0) { toast.error("数量格式错误"); return; }
               const priceDelta = parseSafeFloat(modifierPriceDelta);
-              if (priceDelta === null) {
-                toast("價格調整已設為 0（元）", { icon: "⚠️" });
-              }
-              onAddModifier({
-                order_item_id: modifierOrderItemId,
-                modifier_type: modifierType,
-                material_id: parseInt(modifierMaterialId),
-                qty,
-                price_delta: priceDelta ?? 0,
-              });
+              if (priceDelta === null) { toast("价格调整已设为 0（元）", { icon: "⚠️" }); }
+              onAddModifier({ order_item_id: modifierOrderItemId, modifier_type: modifierType, material_id: parseInt(modifierMaterialId), qty, price_delta: priceDelta ?? 0 });
               setModifierDialogOpen(false);
-            }}>確認</Button>
+            }}>确认</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
